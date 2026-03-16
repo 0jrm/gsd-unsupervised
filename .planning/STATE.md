@@ -46,6 +46,10 @@ Recent decisions affecting current work:
 - Logger singleton pattern with initLogger/getLogger for easy module access
 - Graceful shutdown: first SIGINT sets flag, second force-exits
 
+### Pending Todos
+
+1 pending todo(s) in `.planning/todos/pending/`
+
 ### Deferred Issues
 
 None yet.
