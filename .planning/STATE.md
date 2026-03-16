@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-03-16)
 ## Current Position
 
 Phase: 1 of 7 (Foundation & CLI Scaffold)
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-03-16 — Project initialized
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-03-16 — Completed 01-03-PLAN.md
 
-Progress: ░░░░░░░░░░ 0%
+Progress: █████░░░░░ 43%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0 hours
+- Total plans completed: 3
+- Average duration: ~3min
+- Total execution time: ~9min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| — | — | — | — |
+| 1 - Foundation | 3/3 | ~9min | ~3min |
 
 **Recent Trend:**
-- Last 5 plans: —
-- Trend: —
+- Last 3 plans: 3min, 4min, 2min
+- Trend: Stable
 
 ## Accumulated Context
 
@@ -40,7 +40,11 @@ Progress: ░░░░░░░░░░ 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-(None yet)
+- ESM static import in bin shim (avoids double main() invocation)
+- Config uses safeParse with formatted errors for user-friendly validation
+- Goals parser uses section headers for status (not checkbox state)
+- Logger singleton pattern with initLogger/getLogger for easy module access
+- Graceful shutdown: first SIGINT sets flag, second force-exits
 
 ### Deferred Issues
 
@@ -53,7 +57,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-16
-Stopped at: Project initialization complete
+Stopped at: Completed 01-03-PLAN.md — Phase 1 complete
 Resume file: None
 
 ## Architecture Decisions (Pre-Phase 1)
@@ -68,3 +72,13 @@ Resume file: None
 - All cursor-agent calls use: -p --force --trust --approve-mcps --workspace <dir> --output-format stream-json
 - --workspace is MANDATORY — without it GSD rules don't load
 - session_id captured from first NDJSON event {"type":"session_init"}
+
+### Auth (Phase 7 concern)
+- Headless cursor-agent requires CURSOR_API_KEY env var
+- setup.sh must check for it and guide user to obtain it
+- Without it, every orchestrator invocation will fail silently
+
+### Auth (Phase 7 concern)
+- Headless cursor-agent requires CURSOR_API_KEY env var
+- setup.sh must check for it and guide user to obtain it
+- Without it, every orchestrator invocation will fail silently
