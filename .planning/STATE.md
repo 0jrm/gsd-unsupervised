@@ -55,3 +55,16 @@ None yet.
 Last session: 2026-03-16
 Stopped at: Project initialization complete
 Resume file: None
+
+## Architecture Decisions (Pre-Phase 1)
+
+### Session Tracking
+- Each cursor-agent invocation writes session_id to session-log.jsonl
+- Format: {"ts":"...","goal":"...","phase":"...","session_id":"...","status":"running|done|crashed"}
+- Orchestrator reads this on startup to detect interrupted sessions
+- Crash recovery: find last "running" entry → re-run that phase from last git commit
+
+### Invocation Pattern (from Phase 3 research)
+- All cursor-agent calls use: -p --force --trust --approve-mcps --workspace <dir> --output-format stream-json
+- --workspace is MANDATORY — without it GSD rules don't load
+- session_id captured from first NDJSON event {"type":"session_init"}
