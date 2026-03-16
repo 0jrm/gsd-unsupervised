@@ -1,0 +1,29 @@
+{
+  "name": "gsd-autopilot",
+  "version": "0.1.0",
+  "description": "Autonomous orchestrator for Cursor agent + GSD framework",
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+    "gsd-autopilot": "./bin/gsd-autopilot"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/cli.js",
+    "dev": "tsc --watch"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^13.1.0",
+    "zod": "^3.24.0",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.13.0"
+  }
+}
