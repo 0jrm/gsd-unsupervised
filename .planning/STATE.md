@@ -48,7 +48,7 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-1 pending todo(s) in `.planning/todos/pending/`
+2 pending todo(s) in `.planning/todos/pending/`
 
 ### Deferred Issues
 
