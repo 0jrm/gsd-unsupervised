@@ -2,6 +2,10 @@ import { Command } from 'commander';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { initLogger, createChildLogger } from './logger.js';
+import { loadConfig } from './config.js';
+import { loadGoals, getPendingGoals } from './goals.js';
+import { runDaemon, registerShutdownHandlers } from './daemon.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,10 +28,57 @@ program
   .option('--max-concurrent <n>', 'Max concurrent projects when parallel', '3')
   .option('--verbose', 'Enable verbose/debug logging', false)
   .option('--dry-run', 'Parse goals and show plan without executing', false)
-  .action((opts) => {
-    console.log('gsd-autopilot starting with options:');
-    console.log(JSON.stringify(opts, null, 2));
-    // Stub: daemon loop (Plan 03) will replace this
+  .action(async (opts) => {
+    const verbose = opts.verbose as boolean;
+    const logger = initLogger({
+      level: verbose ? 'debug' : 'info',
+      pretty: verbose,
+    });
+    const log = createChildLogger(logger, 'cli');
+
+    try {
+      const config = loadConfig({
+        configPath: opts.config as string,
+        cliOverrides: {
+          goalsPath: opts.goals as string,
+          parallel: opts.parallel as boolean,
+          maxConcurrent: parseInt(opts.maxConcurrent as string, 10),
+          verbose,
+        },
+      });
+
+      log.debug({ config }, 'Configuration loaded');
+
+      if (opts.dryRun as boolean) {
+        const goals = await loadGoals(config.goalsPath);
+        const pending = getPendingGoals(goals);
+
+        console.log('\n  Goals Queue Summary');
+        console.log('  ' + '─'.repeat(60));
+        console.log(
+          '  ' +
+            'Title'.padEnd(50) +
+            'Status',
+        );
+        console.log('  ' + '─'.repeat(60));
+        for (const g of goals) {
+          console.log(
+            '  ' +
+              g.title.slice(0, 49).padEnd(50) +
+              g.status,
+          );
+        }
+        console.log('  ' + '─'.repeat(60));
+        console.log(`  Total: ${goals.length}  |  Pending: ${pending.length}\n`);
+        return;
+      }
+
+      registerShutdownHandlers(logger);
+      await runDaemon(config, logger);
+    } catch (err) {
+      log.error({ err }, 'Fatal error');
+      process.exit(1);
+    }
   });
 
 export function main(): void {
