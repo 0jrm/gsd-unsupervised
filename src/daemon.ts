@@ -1,17 +1,9 @@
 import type { AutopilotConfig } from './config.js';
 import type { Logger } from './logger.js';
-import type { Goal } from './goals.js';
 import { loadGoals, getPendingGoals } from './goals.js';
+import { orchestrateGoal } from './orchestrator.js';
 
 let shuttingDown = false;
-
-async function processGoal(
-  goal: Goal,
-  _config: AutopilotConfig,
-  logger: Logger,
-): Promise<void> {
-  logger.info({ goal: goal.title }, 'TODO: orchestrate goal via cursor-agent');
-}
 
 export async function runDaemon(
   config: AutopilotConfig,
@@ -36,15 +28,32 @@ export async function runDaemon(
     logger.info('Sequential mode: processing goals one at a time');
   }
 
-  for (const goal of pending) {
+  for (let i = 0; i < pending.length; i++) {
+    const goal = pending[i];
+
     if (shuttingDown) {
       logger.warn('Shutdown requested — stopping after current goal');
       break;
     }
 
     logger.info({ goal: goal.title }, `Processing goal: ${goal.title}`);
-    await processGoal(goal, config, logger);
-    logger.info({ goal: goal.title }, `Completed goal: ${goal.title}`);
+    try {
+      await orchestrateGoal({
+        goal,
+        config,
+        logger,
+        isShuttingDown: () => shuttingDown,
+      });
+      logger.info(
+        { goal: goal.title, progress: `${i + 1}/${pending.length}` },
+        `Completed goal ${i + 1}/${pending.length}: ${goal.title}`,
+      );
+    } catch (err) {
+      logger.error(
+        { err, goal: goal.title, progress: `${i + 1}/${pending.length}` },
+        `Failed goal ${i + 1}/${pending.length}: ${goal.title} — continuing to next goal`,
+      );
+    }
   }
 
   if (!shuttingDown) {
