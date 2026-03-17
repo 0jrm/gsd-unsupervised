@@ -30,7 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Goal**: CLI entrypoint, config (JSON with goals path, agent, timeouts, gates), goals from markdown (pending/in progress/done), roadmap and phase discovery from `.planning/` (ROADMAP.md, phase dirs, PLAN.md).
 **Depends on**: Nothing (first phase)
 **Research**: Unlikely (project setup, established patterns)
-**Plans**: TBD (e.g. 3 plans: CLI scaffold, config + goals, discovery)
+**Plans**: 3 plans
 
 Plans:
 - [ ] 01-01: CLI scaffold (Commander, ESM, entrypoint)
@@ -41,7 +41,7 @@ Plans:
 **Goal**: GSD state machine and command sequence — New → Initializing → Creating roadmap → Planning phase → Executing plan → Phase complete → Complete/Failed.
 **Depends on**: Phase 1
 **Research**: Unlikely (internal state machine)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 - [ ] 02-01: State machine (states, transitions)
@@ -52,7 +52,7 @@ Plans:
 **Depends on**: Phase 2
 **Research**: Likely (Cursor agent invocation, subprocess, stream parsing)
 **Research topics**: Cursor CLI/agent invocation from Node, stream parsing, timeout handling
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 - [ ] 03-01: Agent invoker (subprocess, path, timeout)
@@ -72,7 +72,7 @@ Plans:
 **Goal**: Session logging, resume-from phase/plan, heartbeat for crash detection.
 **Depends on**: Phase 4
 **Research**: Unlikely (session log format, resume logic)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 - [ ] 05-01: Session log and resume state
@@ -82,7 +82,7 @@ Plans:
 **Goal**: Optional HTTP status server for daemon; graceful shutdown. (CLI and status endpoint only for v1 — no full web UI.)
 **Depends on**: Phase 5
 **Research**: Unlikely (express already in stack)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
 - [ ] 06-01: HTTP status server and graceful shutdown
@@ -92,7 +92,7 @@ Plans:
 **Depends on**: Phase 6
 **Research**: Likely (WSL path resolution, Cursor paths)
 **Research topics**: WSL path resolution, Cursor CLI paths, clip.exe on WSL
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
 - [ ] 07-01: WSL path resolution and setup script
@@ -102,8 +102,8 @@ Plans:
 **Execution Order:**
 Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
-| Phase | Plans Complete | Status      | Completed |
-|-------|----------------|------------|-----------|
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
 | 1. Foundation | 0/3 | Not started | - |
 | 2. Lifecycle | 0/2 | Not started | - |
 | 3. Agent Integration | 0/2 | Not started | - |
