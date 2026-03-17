@@ -16,7 +16,7 @@ This document gives a capable model enough context to act as a useful assistant 
 
 | Capability | Description |
 |------------|-------------|
-| **CLI & config** | Single binary entry (`gsd-autopilot`), Commander-based flags, Zod-validated config (file + CLI overrides). |
+| **CLI & config** | Single binary entry (`unsupervised-gsd`), Commander-based flags, Zod-validated config (file + CLI overrides). |
 | **Goal queue** | Parses `goals.md` by sections: **Pending**, **In Progress**, **Done**. Processes items under Pending; status is section-based, not checkbox state. |
 | **Dry-run** | `--dry-run` prints goal summary and config (including `stateWatchDebounceMs`); no API key required, no agent runs. |
 | **Sequential execution** | Daemon processes pending goals one after another; `--parallel` and `--max-concurrent` exist for future parallel mode. |
@@ -90,7 +90,7 @@ Format: `{"ts":"...","goal":"...","phase":"...","session_id":"...","status":"run
 ```
 gsd-cli-test/
 ├── bin/
-│   └── gsd-autopilot          # Entry: #!/usr/bin/env node; imports '../dist/cli.js'. ESM static import to avoid double main().
+│   └── unsupervised-gsd          # Entry: #!/usr/bin/env node; imports '../dist/cli.js'. ESM static import to avoid double main().
 │
 ├── src/                        # TypeScript source (emit to dist/)
 │   ├── cli.ts                  # Commander program, options, initLogger, loadConfig, dry-run vs runDaemon, validateCursorApiKey before run.
@@ -142,7 +142,7 @@ gsd-cli-test/
 ├── session-log.jsonl           # Runtime: one line per session (ts, goal, phase, session_id, status). Used for crash recovery (Phase 5).
 ├── logs/                       # Optional log output (e.g. orchestrator.log).
 │
-├── package.json                # name: gsd-autopilot, type: module, main/bin, scripts: build/start/dev/test, engines node>=18, deps (chokidar, commander, pino, tree-kill, zod), devDeps (typescript, vitest, @types/node).
+├── package.json                # name: unsupervised-gsd, type: module, main/bin, scripts: build/start/dev/test, engines node>=18, deps (chokidar, commander, pino, tree-kill, zod), devDeps (typescript, vitest, @types/node).
 ├── tsconfig.json               # TypeScript compiler options (emit to dist/).
 ├── vitest.config.ts            # Vitest config.
 ├── .gitignore                  # node_modules/, dist/, *.tgz
@@ -154,7 +154,7 @@ gsd-cli-test/
 
 | Path / area | Purpose |
 |-------------|---------|
-| `bin/gsd-autopilot` | Single CLI entry; delegates to compiled `dist/cli.js`. |
+| `bin/unsupervised-gsd` | Single CLI entry; delegates to compiled `dist/cli.js`. |
 | `src/*.ts` | All app and test logic; ESM; tests next to or beside implementation. |
 | `.planning/` | GSD state: PROJECT, ROADMAP, STATE, phases (PLAN/SUMMARY), todos. Authoritative for “what we’re building” and “where we are”. |
 | `STATE.md` | Current position (phase, plan, status, progress); read by state-parser and StateWatcher; critical for Phase 5 resume. |

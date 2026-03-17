@@ -17,7 +17,7 @@ tech-stack:
   patterns: [ESM modules, tsc direct compilation]
 
 key-files:
-  created: [package.json, package-lock.json, tsconfig.json, .gitignore, src/cli.ts, bin/gsd-autopilot]
+  created: [package.json, package-lock.json, tsconfig.json, .gitignore, src/cli.ts, bin/unsupervised-gsd]
   modified: []
 
 key-decisions:
@@ -49,7 +49,7 @@ completed: 2026-03-16
 - Initialized Node.js project with ESM, TypeScript strict mode, and all required dependencies (commander, zod, pino, pino-pretty)
 - Created CLI entry point with all 6 documented flags (--goals, --config, --parallel, --max-concurrent, --verbose, --dry-run)
 - CLI responds correctly to --help (shows all options) and --version (prints 0.1.0)
-- bin/gsd-autopilot shim is executable and wired to dist/cli.js
+- bin/unsupervised-gsd shim is executable and wired to dist/cli.js
 
 ## Task Commits
 1. **Task 1: Initialize Node.js project with TypeScript** - `741f6e9` (chore)
@@ -61,7 +61,7 @@ completed: 2026-03-16
 - `tsconfig.json` - TypeScript config targeting ES2022/Node16
 - `.gitignore` - Excludes node_modules/, dist/, *.tgz
 - `src/cli.ts` - Main CLI entry point with commander, all flags, stub action
-- `bin/gsd-autopilot` - Executable shell shim importing dist/cli.js
+- `bin/unsupervised-gsd` - Executable shell shim importing dist/cli.js
 
 ## Decisions Made
 - Used static ESM import in bin shim (`import '../dist/cli.js'`) instead of dynamic `import().then()` to avoid double `main()` invocation since cli.ts calls `main()` at module level.

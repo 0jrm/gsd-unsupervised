@@ -69,3 +69,18 @@ The orchestrator loop must never stall, never lose state, and recover from crash
 
 ---
 *Last updated: 2026-03-16 after initialization*
+
+## Vision Update – 2026-03-16 (Agent-Agnostic + Dashboard)
+
+Unsupervised GSD must become the universal autopilot layer for ANY local AI coding CLI.
+
+**Phase 6 Requirements (non-negotiable):**
+- --agent flag (default: "cursor")
+- Pluggable factory: createAgentInvoker("cursor" | "claude-code" | "gemini-cli" | "codex")
+- All core logic (heartbeat, resume, status-server, git checkpoint, session-log) stays 100% generic
+- Dashboard must display current agent + allow live switching
+- Each new adapter <50 LOC, reuses exact NDJSON + heartbeat pattern
+- Goal: become the “Docker for AI coding agents”
+
+Existing Cursor behavior must remain identical with --agent=cursor.
+

@@ -33,11 +33,11 @@ npm run build
 
 ```bash
 # Preview the goal queue (no API key needed)
-./bin/gsd-autopilot --dry-run --goals goals.md
+./bin/unsupervised-gsd --dry-run --goals goals.md
 
 # Run the daemon (requires CURSOR_API_KEY)
 export CURSOR_API_KEY=your_key_here
-./bin/gsd-autopilot --goals goals.md --verbose
+./bin/unsupervised-gsd --goals goals.md --verbose
 ```
 
 ### CLI options
@@ -105,7 +105,7 @@ Example `.autopilot/config.json`:
 ## Project structure
 
 ```
-├── bin/gsd-autopilot     # CLI entry (Node)
+├── bin/unsupervised-gsd     # CLI entry (Node)
 ├── src/
 │   ├── cli.ts            # Commander setup, dry-run, daemon entry
 │   ├── config.ts         # Zod config schema and loader

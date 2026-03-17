@@ -1,11 +1,11 @@
 {
-  "name": "gsd-autopilot",
+  "name": "unsupervised-gsd",
   "version": "0.1.0",
   "description": "Autonomous orchestrator for Cursor agent + GSD framework",
   "type": "module",
   "main": "dist/cli.js",
   "bin": {
-    "gsd-autopilot": "./bin/gsd-autopilot"
+    "unsupervised-gsd": "bin/unsupervised-gsd"
   },
   "scripts": {
     "build": "tsc",
