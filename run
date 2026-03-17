@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Run the daemon with dashboard + ngrok (recommended). Requires CURSOR_API_KEY in env or .env.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
+exec ./bin/gsd-unsupervised --goals goals.md --status-server 4173 --ngrok --verbose "$@"

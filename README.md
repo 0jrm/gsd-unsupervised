@@ -58,17 +58,25 @@ bash setup.sh --validate    # Bootstrap + validation checks + orchestrator smoke
 
 ### Recommended (dashboard + public URL)
 
-Run the daemon with the status server and ngrok so you get a local dashboard and a public URL (ngrok prints it to the terminal):
+From the project root you can use the **`run`** script (same as the long command below):
+
+```bash
+./run
+```
+
+Or run the daemon explicitly with the status server and ngrok:
 
 ```bash
 export CURSOR_API_KEY=your_key_here
 ./bin/gsd-unsupervised --goals goals.md --status-server 4173 --ngrok --verbose
 ```
 
+Extra args are passed through (e.g. `./run --parallel`).
+
 - **Status server** on port `4173`: open `http://localhost:4173` for the HTML dashboard.
 - **ngrok** runs `ngrok http 4173` for the same process; the public URL appears in the terminal. When the daemon exits, ngrok is stopped.
 
-Requires [ngrok](https://ngrok.com/) on your PATH and an ngrok authtoken (e.g. `ngrok config add-authtoken <token>`).
+Requires [ngrok](https://ngrok.com/) on your PATH and an ngrok authtoken (e.g. `ngrok config add-authtoken <token>`). Set `CURSOR_API_KEY` in your environment or in a `.env` file.
 
 ### Other ways to run
 
