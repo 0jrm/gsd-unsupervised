@@ -20,7 +20,7 @@ None
 - [x] **Phase 4: State Monitoring & Phase Transitions** — File watching on STATE.md, progress detection, automatic phase advancement
 - [x] **Phase 5: Crash Detection & Recovery** — Process health monitoring, dead agent detection, resume from exact failure point
 - [x] **Phase 6: Web Dashboard** — Express server, plain HTML/CSS/JS dashboard with live status, progress bars, git feed, token tracking
-- [ ] **Phase 7: WSL Bootstrap & Setup** — setup.sh script, WSL detection, path resolution, GSD rules copy, install validation
+- [x] **Phase 7: WSL Bootstrap & Setup** — setup.sh script, WSL detection, path resolution, GSD rules copy, install validation
 
 ## Phase Details
 
@@ -65,7 +65,7 @@ None
 **Goal**: One-command setup.sh that detects WSL, resolves Windows .cursor path, copies GSD rules, validates the install, and gets the full stack running
 **Depends on**: Phase 6
 **Research**: Unlikely (shell scripting, well-documented WSL path patterns)
-**Plans**: 1/2 complete (07-01 WSL script and rules sync; 07-02 validation and smoke checks TBD)
+**Plans**: 2/2 complete (07-01 WSL script and rules sync; 07-02 validation and smoke checks)
 
 ## Progress
 
@@ -80,4 +80,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. State Monitoring & Phase Transitions | 3/3 | Complete | 2026-03-16 |
 | 5. Crash Detection & Recovery | 4/4 | Complete | 2026-03-17 |
 | 6. Web Dashboard | 3/3 | Complete | 2026-03-16 |
-| 7. WSL Bootstrap & Setup | 1/2 | In progress | - |
+| 7. WSL Bootstrap & Setup | 2/2 | Complete | 2026-03-16 |
