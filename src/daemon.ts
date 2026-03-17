@@ -13,7 +13,7 @@ import {
   inspectForCrashedSessions,
   appendSessionLog,
 } from './session-log.js';
-import { createStatusServer } from './status-server.js';
+import { createStatusServer, readPlanningConfig } from './status-server.js';
 
 let shuttingDown = false;
 
@@ -33,7 +33,22 @@ export async function runDaemon(
 
   const agent = createAgentInvoker(config.agent as AgentId, config);
 
-  if (config.parallel) {
+  const stateMdPath = path.join(config.workspaceRoot, '.planning', 'STATE.md');
+  const heartbeatPath = path.join(config.workspaceRoot, '.planning', 'heartbeat.txt');
+  const planningConfigPath = path.join(config.workspaceRoot, '.planning', 'config.json');
+  const heartbeatTimeoutMs = 60_000;
+
+  let effectiveParallel = config.parallel;
+  try {
+    const planning = await readPlanningConfig(planningConfigPath);
+    if (planning.parallelization?.enabled !== undefined) {
+      effectiveParallel = planning.parallelization.enabled;
+    }
+  } catch {
+    // use config.parallel
+  }
+
+  if (effectiveParallel) {
     logger.info(
       { maxConcurrent: config.maxConcurrent },
       `Parallel mode: processing up to ${config.maxConcurrent} goals concurrently`,
@@ -41,10 +56,6 @@ export async function runDaemon(
   } else {
     logger.info('Sequential mode: processing goals one at a time');
   }
-
-  const stateMdPath = path.join(config.workspaceRoot, '.planning', 'STATE.md');
-  const heartbeatPath = path.join(config.workspaceRoot, '.planning', 'heartbeat.txt');
-  const heartbeatTimeoutMs = 60_000;
 
   let currentGoal: string | null = null;
   let statusServerClose: (() => Promise<void>) | null = null;
@@ -59,6 +70,7 @@ export async function runDaemon(
         stateMdPath,
         sessionLogPath: config.sessionLogPath,
         workspaceRoot: config.workspaceRoot,
+        planningConfigPath,
       },
     );
     statusServerClose = close;

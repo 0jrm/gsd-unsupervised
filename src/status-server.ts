@@ -1,7 +1,25 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import express, { type Request, type Response } from 'express';
 import { readStateMd } from './state-parser.js';
 import { readSessionLog } from './session-log.js';
 import { getRecentCommits } from './git.js';
+
+/** Schema for .planning/config.json parallelization slice (exposed via /api/config). */
+export interface PlanningConfig {
+  mode?: string;
+  depth?: string;
+  parallelization?: {
+    enabled?: boolean;
+    plan_level?: boolean;
+    task_level?: boolean;
+    skip_checkpoints?: boolean;
+    max_concurrent_agents?: number;
+    min_plans_for_parallel?: number;
+  };
+  gates?: Record<string, boolean>;
+  safety?: Record<string, boolean>;
+}
 
 export interface StatusPayload {
   running: boolean;
@@ -54,10 +72,44 @@ export interface StatusServerOptions {
   stateMdPath: string;
   sessionLogPath: string;
   workspaceRoot: string;
+  /** Path to .planning/config.json for GET/POST /api/config (optional). */
+  planningConfigPath?: string;
   /** Max session log entries in dashboard payload (default 20). */
   sessionLogLimit?: number;
   /** Max git commits in feed (default 10). */
   gitFeedLimit?: number;
+}
+
+const DEFAULT_PLANNING_CONFIG: PlanningConfig = {
+  mode: 'interactive',
+  depth: 'standard',
+  parallelization: {
+    enabled: false,
+    plan_level: false,
+    task_level: false,
+    skip_checkpoints: false,
+    max_concurrent_agents: 3,
+    min_plans_for_parallel: 2,
+  },
+};
+
+export async function readPlanningConfig(path: string): Promise<PlanningConfig> {
+  if (!existsSync(path)) return { ...DEFAULT_PLANNING_CONFIG };
+  try {
+    const raw = await readFile(path, 'utf-8');
+    const data = JSON.parse(raw) as PlanningConfig;
+    return {
+      ...DEFAULT_PLANNING_CONFIG,
+      ...data,
+      parallelization: { ...DEFAULT_PLANNING_CONFIG.parallelization, ...data.parallelization },
+    };
+  } catch {
+    return { ...DEFAULT_PLANNING_CONFIG };
+  }
+}
+
+async function writePlanningConfig(path: string, config: PlanningConfig): Promise<void> {
+  await writeFile(path, JSON.stringify(config, null, 2), 'utf-8');
 }
 
 /** Returns inline HTML for the dashboard (mobile-first, no build). */
@@ -90,6 +142,13 @@ function getDashboardHtml(): string {
     .git-hash { font-family: ui-monospace, monospace; color: var(--muted); font-size: 0.75rem; }
     .metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.75rem; }
     .metrics span { font-size: 0.8125rem; color: var(--muted); }
+    .toggle-wrap { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .toggle { position: relative; width: 44px; height: 24px; background: var(--border); border-radius: 9999px; cursor: pointer; border: none; }
+    .toggle.on { background: var(--accent); }
+    .toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #fff; border-radius: 50%; transition: transform 0.2s; }
+    .toggle.on::after { transform: translateX(20px); }
+    .toggle-label { font-size: 0.875rem; }
+    .error-msg { font-size: 0.8125rem; color: #ef4444; margin-top: 0.25rem; }
   </style>
 </head>
 <body>
@@ -113,9 +172,18 @@ function getDashboardHtml(): string {
       <h2>Tokens / cost</h2>
       <div class="metrics" id="metrics"><span>—</span></div>
     </section>
+    <section class="card" id="config-section">
+      <h2>Execution mode</h2>
+      <div class="toggle-wrap">
+        <button type="button" class="toggle" id="mode-toggle" aria-label="Parallel mode"></button>
+        <span class="toggle-label" id="mode-label">Sequential</span>
+      </div>
+      <p class="error-msg" id="config-error" style="display:none"></p>
+    </section>
   </div>
   <script>
     const API = '/api/status';
+    const CONFIG_API = '/api/config';
     const REFRESH_MS = 10000;
 
     function render(data) {
@@ -144,11 +212,42 @@ function getDashboardHtml(): string {
       return div.innerHTML;
     }
 
+    function renderConfig(parallel) {
+      var t = document.getElementById('mode-toggle');
+      var l = document.getElementById('mode-label');
+      t.classList.toggle('on', !!parallel);
+      l.textContent = parallel ? 'Parallel' : 'Sequential';
+    }
+
     function fetchStatus() {
       fetch(API).then(function(r) { return r.json(); }).then(render).catch(function() {});
     }
 
+    function fetchConfig() {
+      fetch(CONFIG_API).then(function(r) { return r.json(); }).then(function(c) {
+        renderConfig(c.parallelization && c.parallelization.enabled);
+      }).catch(function() {});
+    }
+
+    document.getElementById('mode-toggle').addEventListener('click', function() {
+      var errEl = document.getElementById('config-error');
+      errEl.style.display = 'none';
+      fetch(CONFIG_API).then(function(r) { return r.json(); }).then(function(c) {
+        var next = !(c.parallelization && c.parallelization.enabled);
+        return fetch(CONFIG_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ parallelization: Object.assign({}, c.parallelization || {}, { enabled: next }) }) });
+      }).then(function(r) {
+        if (!r.ok) throw new Error(r.statusText);
+        return r.json();
+      }).then(function(c) {
+        renderConfig(c.parallelization && c.parallelization.enabled);
+      }).catch(function(e) {
+        errEl.textContent = 'Update failed: ' + e.message;
+        errEl.style.display = 'block';
+      });
+    });
+
     fetchStatus();
+    fetchConfig();
     setInterval(fetchStatus, REFRESH_MS);
   </script>
 </body>
@@ -170,6 +269,49 @@ export function createStatusServer(
   const app = express();
   const sessionLogLimit = options?.sessionLogLimit ?? 20;
   const gitFeedLimit = options?.gitFeedLimit ?? 10;
+  const planningConfigPath = options?.planningConfigPath;
+
+  if (planningConfigPath) {
+    app.use(express.json());
+    app.get('/api/config', async (_req: Request, res: Response) => {
+      try {
+        const config = await readPlanningConfig(planningConfigPath);
+        res.json(config);
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+    app.post('/api/config', async (req: Request, res: Response) => {
+      try {
+        const body = req.body as Record<string, unknown>;
+        if (!body || typeof body !== 'object') {
+          res.status(400).json({ error: 'Invalid JSON body' });
+          return;
+        }
+        const current = await readPlanningConfig(planningConfigPath);
+        const nextParallelization = body.parallelization;
+        if (nextParallelization !== undefined) {
+          if (typeof nextParallelization !== 'object' || nextParallelization === null) {
+            res.status(400).json({ error: 'parallelization must be an object' });
+            return;
+          }
+          const merged = {
+            ...current.parallelization,
+            ...nextParallelization,
+          };
+          if (merged.enabled !== undefined && typeof merged.enabled !== 'boolean') {
+            res.status(400).json({ error: 'parallelization.enabled must be a boolean' });
+            return;
+          }
+          current.parallelization = merged;
+        }
+        await writePlanningConfig(planningConfigPath, current);
+        res.json(current);
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+  }
 
   /** Dashboard at GET / when rich options provided; legacy JSON at GET /status. */
   if (options) {

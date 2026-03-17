@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it, expect, afterEach } from 'vitest';
 import { createStatusServer } from './status-server.js';
 
@@ -8,6 +11,16 @@ describe('status-server', () => {
   afterEach(async () => {
     if (close) await close();
   });
+
+  async function listen(server: import('node:http').Server): Promise<number> {
+    await new Promise<void>((resolve, reject) => {
+      server.once('listening', resolve);
+      server.once('error', reject);
+    });
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Expected port binding');
+    return address.port;
+  }
 
   it('serves GET /status with JSON', async () => {
     const payload = { running: true, currentGoal: 'Test' };
@@ -126,5 +139,80 @@ describe('status-server', () => {
     expect(body).toHaveProperty('cost');
     expect(Array.isArray(body.sessionLogEntries)).toBe(true);
     expect(Array.isArray(body.gitFeed)).toBe(true);
+  });
+
+  it('serves GET /api/config when planningConfigPath provided', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'status-server-config-'));
+    const configPath = join(dir, 'config.json');
+    writeFileSync(
+      configPath,
+      JSON.stringify({ parallelization: { enabled: false } }),
+      'utf-8',
+    );
+    const { server, close: c } = createStatusServer(port, () => ({ running: false }), {
+      stateMdPath: '/n/s.md',
+      sessionLogPath: '/n/s.jsonl',
+      workspaceRoot: process.cwd(),
+      planningConfigPath: configPath,
+    });
+    close = c;
+    const p = await listen(server);
+    const res = await fetch(`http://127.0.0.1:${p}/api/config`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.parallelization).toBeDefined();
+    expect(body.parallelization.enabled).toBe(false);
+    rmSync(dir, { recursive: true });
+  });
+
+  it('POST /api/config updates and persists parallelization', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'status-server-config-'));
+    const configPath = join(dir, 'config.json');
+    writeFileSync(
+      configPath,
+      JSON.stringify({ parallelization: { enabled: false } }),
+      'utf-8',
+    );
+    const { server, close: c } = createStatusServer(port, () => ({ running: false }), {
+      stateMdPath: '/n/s.md',
+      sessionLogPath: '/n/s.jsonl',
+      workspaceRoot: process.cwd(),
+      planningConfigPath: configPath,
+    });
+    close = c;
+    const p = await listen(server);
+    const postRes = await fetch(`http://127.0.0.1:${p}/api/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parallelization: { enabled: true } }),
+    });
+    expect(postRes.status).toBe(200);
+    const updated = await postRes.json();
+    expect(updated.parallelization.enabled).toBe(true);
+    const getRes = await fetch(`http://127.0.0.1:${p}/api/config`);
+    const getBody = await getRes.json();
+    expect(getBody.parallelization.enabled).toBe(true);
+    rmSync(dir, { recursive: true });
+  });
+
+  it('POST /api/config with invalid parallelization.enabled returns 400', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'status-server-config-'));
+    const configPath = join(dir, 'config.json');
+    writeFileSync(configPath, JSON.stringify({}), 'utf-8');
+    const { server, close: c } = createStatusServer(port, () => ({ running: false }), {
+      stateMdPath: '/n/s.md',
+      sessionLogPath: '/n/s.jsonl',
+      workspaceRoot: process.cwd(),
+      planningConfigPath: configPath,
+    });
+    close = c;
+    const p = await listen(server);
+    const res = await fetch(`http://127.0.0.1:${p}/api/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parallelization: { enabled: 'yes' } }),
+    });
+    expect(res.status).toBe(400);
+    rmSync(dir, { recursive: true });
   });
 });
