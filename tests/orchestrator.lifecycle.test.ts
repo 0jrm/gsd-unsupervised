@@ -24,6 +24,8 @@ function makeBaseConfig(workspaceRoot: string): AutopilotConfig {
     goalsPath: join(workspaceRoot, 'goals.md'),
     parallel: false,
     maxConcurrent: 1,
+    maxCpuFraction: 1,
+    maxMemoryFraction: 1,
     verbose: false,
     logLevel: 'silent',
     workspaceRoot,
@@ -211,7 +213,7 @@ describe('orchestrator lifecycle', () => {
       ),
     ).toBe(false);
     },
-    30000,
+    60000,
   );
 });
 

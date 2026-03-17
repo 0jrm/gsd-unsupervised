@@ -1,4 +1,5 @@
-import { readFile, appendFile } from 'node:fs/promises';
+import { readFile, appendFile, mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import path from 'node:path';
 import { parseRoadmap, findPhaseDir, discoverPlans, getNextUnexecutedPlan } from './roadmap-parser.js';
 
@@ -36,18 +37,24 @@ export interface SessionLogEntry {
 
 export async function appendSessionLog(logPath: string, entry: SessionLogEntry): Promise<void> {
   const line = JSON.stringify(entry) + '\n';
-  await appendFile(logPath, line, { encoding: 'utf-8', flag: 'a' });
+  try {
+    const dir = dirname(logPath);
+    if (dir && dir !== '.') {
+      await mkdir(dir, { recursive: true }).catch(() => {});
+    }
+    await appendFile(logPath, line, { encoding: 'utf-8', flag: 'a' });
+  } catch {
+    // Best-effort only: logging failures must never crash the daemon.
+  }
 }
 
 export async function readSessionLog(logPath: string): Promise<SessionLogEntry[]> {
   let content: string;
   try {
     content = await readFile(logPath, 'utf-8');
-  } catch (err: unknown) {
-    if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return [];
-    }
-    throw err;
+  } catch {
+    // Missing or unreadable log is treated as "no history" for callers.
+    return [];
   }
 
   const entries: SessionLogEntry[] = [];

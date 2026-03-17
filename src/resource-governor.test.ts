@@ -9,6 +9,9 @@ describe('resource-governor', () => {
     expect(typeof info.load15).toBe('number');
     expect(typeof info.cpuCount).toBe('number');
     expect(typeof info.cpuFraction).toBe('number');
+    expect(typeof info.memoryFraction).toBe('number');
+    expect(typeof info.totalMemBytes).toBe('number');
+    expect(typeof info.freeMemBytes).toBe('number');
     expect(info.cpuCount).toBeGreaterThan(0);
   });
 

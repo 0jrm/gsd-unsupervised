@@ -68,7 +68,10 @@ export interface DashboardStatusPayload {
   /** Placeholder for cost tracking (populated later). */
   cost?: { amount?: number; currency?: string };
   /** Current system load information (best-effort). */
-  systemLoad?: import('./resource-governor.js').LoadInfo & { maxCpuFraction?: number };
+  systemLoad?: import('./resource-governor.js').LoadInfo & {
+    maxCpuFraction?: number;
+    maxMemoryFraction?: number;
+  };
 }
 
 export interface StatusServerOptions {

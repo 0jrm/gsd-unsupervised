@@ -190,6 +190,7 @@ export async function orchestrateGoal(options: {
   async function waitForCpuHeadroom(): Promise<void> {
     await waitForHeadroom({
       maxCpuFraction: config.maxCpuFraction,
+      maxMemoryFraction: config.maxMemoryFraction,
       logger,
     });
   }
