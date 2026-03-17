@@ -2,6 +2,7 @@ import type { AutopilotConfig } from './config.js';
 import type { Logger } from './logger.js';
 import { loadGoals, getPendingGoals } from './goals.js';
 import { orchestrateGoal } from './orchestrator.js';
+import { createCursorAgentInvoker } from './cursor-agent.js';
 
 let shuttingDown = false;
 
@@ -18,6 +19,12 @@ export async function runDaemon(
   }
 
   logger.info({ count: pending.length }, `Found ${pending.length} pending goals`);
+
+  const agent = createCursorAgentInvoker({
+    agentPath: config.cursorAgentPath,
+    defaultTimeoutMs: config.agentTimeoutMs,
+    sessionLogPath: config.sessionLogPath,
+  });
 
   if (config.parallel) {
     logger.info(
@@ -42,6 +49,7 @@ export async function runDaemon(
         goal,
         config,
         logger,
+        agent,
         isShuttingDown: () => shuttingDown,
       });
       logger.info(

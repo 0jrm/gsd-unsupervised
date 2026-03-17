@@ -9,6 +9,8 @@ export const AutopilotConfigSchema = z.object({
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   workspaceRoot: z.string().default(process.cwd()),
   cursorAgentPath: z.string().default('cursor-agent'),
+  agentTimeoutMs: z.number().int().min(10000).default(600000),
+  sessionLogPath: z.string().default('./session-log.jsonl'),
 });
 
 export type AutopilotConfig = z.infer<typeof AutopilotConfigSchema>;

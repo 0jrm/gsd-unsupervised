@@ -6,6 +6,7 @@ import { initLogger, createChildLogger } from './logger.js';
 import { loadConfig } from './config.js';
 import { loadGoals, getPendingGoals } from './goals.js';
 import { runDaemon, registerShutdownHandlers } from './daemon.js';
+import { validateCursorApiKey } from './cursor-agent.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -28,6 +29,8 @@ program
   .option('--max-concurrent <n>', 'Max concurrent projects when parallel', '3')
   .option('--verbose', 'Enable verbose/debug logging', false)
   .option('--dry-run', 'Parse goals and show plan without executing', false)
+  .option('--agent-path <path>', 'Path to cursor-agent binary', 'agent')
+  .option('--agent-timeout <ms>', 'Agent invocation timeout in milliseconds', '600000')
   .action(async (opts) => {
     const verbose = opts.verbose as boolean;
     const logger = initLogger({
@@ -44,10 +47,22 @@ program
           parallel: opts.parallel as boolean,
           maxConcurrent: parseInt(opts.maxConcurrent as string, 10),
           verbose,
+          cursorAgentPath: opts.agentPath as string,
+          agentTimeoutMs: parseInt(opts.agentTimeout as string, 10),
         },
       });
 
       log.debug({ config }, 'Configuration loaded');
+
+      if (!(opts.dryRun as boolean)) {
+        try {
+          validateCursorApiKey();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          process.stderr.write(`Error: ${message}\n`);
+          process.exit(1);
+        }
+      }
 
       if (opts.dryRun as boolean) {
         const goals = await loadGoals(config.goalsPath);
