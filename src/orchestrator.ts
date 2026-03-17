@@ -2,6 +2,7 @@ import path from 'node:path';
 import type { AutopilotConfig } from './config.js';
 import type { Logger } from './logger.js';
 import type { Goal } from './goals.js';
+import type { SessionLogContext } from './session-log.js';
 import { createChildLogger } from './logger.js';
 import {
   GoalLifecyclePhase,
@@ -27,9 +28,10 @@ export type AgentInvoker = (
   command: GsdCommand,
   workspaceDir: string,
   logger: Logger,
+  logContext?: SessionLogContext,
 ) => Promise<AgentResult>;
 
-const stubAgent: AgentInvoker = async (command, workspaceDir, logger) => {
+const stubAgent: AgentInvoker = async (command, workspaceDir, logger, _logContext) => {
   logger.info(
     `Stub: would invoke cursor-agent with "${command.command} ${command.args ?? ''}" in ${workspaceDir}`,
   );
@@ -73,7 +75,7 @@ export async function orchestrateGoal(options: {
     const initCmd = sm.getNextCommand()!;
     sm.setLastCommand(initCmd);
     logger.info({ cmd: initCmd.command }, `Executing: ${initCmd.command}`);
-    let result = await agent(initCmd, config.workspaceRoot, logger);
+    let result = await agent(initCmd, config.workspaceRoot, logger, { goalTitle: goal.title });
     if (!result.success) {
       sm.fail(result.error ?? 'Agent failed');
       return;
@@ -89,7 +91,7 @@ export async function orchestrateGoal(options: {
     const roadmapCmd = sm.getNextCommand()!;
     sm.setLastCommand(roadmapCmd);
     logger.info({ cmd: roadmapCmd.command }, `Executing: ${roadmapCmd.command}`);
-    result = await agent(roadmapCmd, config.workspaceRoot, logger);
+    result = await agent(roadmapCmd, config.workspaceRoot, logger, { goalTitle: goal.title });
     if (!result.success) {
       sm.fail(result.error ?? 'Agent failed');
       return;
@@ -125,7 +127,10 @@ export async function orchestrateGoal(options: {
         { cmd: planCmd.command, phase: phase.number },
         `Executing: ${planCmd.command} ${planCmd.args}`,
       );
-      result = await agent(planCmd, config.workspaceRoot, logger);
+      result = await agent(planCmd, config.workspaceRoot, logger, {
+        goalTitle: goal.title,
+        phaseNumber: phaseNum,
+      });
       if (!result.success) {
         sm.fail(result.error ?? 'Agent failed');
         return;
@@ -183,7 +188,11 @@ export async function orchestrateGoal(options: {
           { cmd: execCmd.command, plan: nextPlan.planNumber },
           `Executing: ${execCmd.command} ${execCmd.args}`,
         );
-        result = await agent(execCmd, config.workspaceRoot, logger);
+        result = await agent(execCmd, config.workspaceRoot, logger, {
+          goalTitle: goal.title,
+          phaseNumber: phaseNum,
+          planNumber: nextPlan.planNumber,
+        });
         if (!result.success) {
           sm.fail(result.error ?? 'Agent failed');
           return;

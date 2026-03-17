@@ -1,17 +1,27 @@
+import { writeFile, unlink } from 'node:fs/promises';
 import type { AgentInvoker, AgentResult } from './orchestrator.js';
 import type { Logger } from './logger.js';
 import { runAgent } from './agent-runner.js';
-import { appendSessionLog, type SessionLogEntry } from './session-log.js';
+import {
+  appendSessionLog,
+  type SessionLogEntry,
+  type SessionLogContext,
+} from './session-log.js';
 import type { CursorStreamEvent } from './stream-events.js';
+
+export type { SessionLogContext };
 
 export interface CursorAgentConfig {
   agentPath: string;
   defaultTimeoutMs: number;
   sessionLogPath: string;
+  /** If set, write heartbeat timestamp here while agent runs (for crash detection). */
+  heartbeatPath?: string;
+  heartbeatIntervalMs?: number;
 }
 
 export function createCursorAgentInvoker(agentConfig: CursorAgentConfig): AgentInvoker {
-  return async (command, workspaceDir, logger): Promise<AgentResult> => {
+  return async (command, workspaceDir, logger, logContext): Promise<AgentResult> => {
     const cmdString = command.args
       ? `${command.command} ${command.args}`
       : command.command;
@@ -25,8 +35,10 @@ export function createCursorAgentInvoker(agentConfig: CursorAgentConfig): AgentI
 
     const baseEntry: Omit<SessionLogEntry, 'status' | 'durationMs' | 'error'> = {
       timestamp: new Date().toISOString(),
-      goalTitle: '',
+      goalTitle: logContext?.goalTitle ?? '',
       phase: command.command,
+      phaseNumber: logContext?.phaseNumber,
+      planNumber: logContext?.planNumber,
       sessionId: null,
       command: cmdString,
     };
@@ -37,6 +49,31 @@ export function createCursorAgentInvoker(agentConfig: CursorAgentConfig): AgentI
     });
 
     const startMs = Date.now();
+    const heartbeatPath = agentConfig.heartbeatPath;
+    const heartbeatIntervalMs = agentConfig.heartbeatIntervalMs ?? 15_000;
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+    const stopHeartbeat = async (): Promise<void> => {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+      if (heartbeatPath) {
+        try {
+          await unlink(heartbeatPath);
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    if (heartbeatPath) {
+      const tick = (): void => {
+        writeFile(heartbeatPath!, new Date().toISOString(), 'utf-8').catch(() => {});
+      };
+      tick();
+      heartbeatTimer = setInterval(tick, heartbeatIntervalMs);
+    }
 
     try {
       const result = await runAgent({
@@ -66,6 +103,8 @@ export function createCursorAgentInvoker(agentConfig: CursorAgentConfig): AgentI
 
       const durationMs = Date.now() - startMs;
       const timedOut = result.stderr.includes('timed out');
+
+      await stopHeartbeat();
 
       if (timedOut) {
         await appendSessionLog(agentConfig.sessionLogPath, {
@@ -106,6 +145,7 @@ export function createCursorAgentInvoker(agentConfig: CursorAgentConfig): AgentI
 
       return { success: false, error: errorMsg };
     } catch (err) {
+      await stopHeartbeat();
       const durationMs = Date.now() - startMs;
       const message = err instanceof Error ? err.message : String(err);
 
