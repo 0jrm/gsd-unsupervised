@@ -1,0 +1,25 @@
+---
+description: Routes custom skill commands and manages auto-clip behavior
+globs:
+alwaysApply: true
+---
+
+# Custom Skills
+
+When the user types any of these commands (with or without a leading `/`), execute the corresponding action immediately.
+
+| Command | Action |
+|---------|--------|
+| `clip` or `/clip` | Run `clip-last` in the shell. It copies the last agent exchange to the Windows clipboard via `clip.exe`. Confirm what was copied. |
+| `clip N` or `/clip N` | Run `clip-last N` to copy the last N exchanges. |
+| `recapitulate` or `/recapitulate` or `recap` | Read agent transcripts from `~/.cursor/projects/home-jrm22n/agent-transcripts/`, synthesize a chronological summary of all sessions, and present current state + next steps. See skill at `~/.cursor/skills/recapitulate/SKILL.md` for full format. |
+| `auto-clip on` | Run `auto-clip on` to enable auto-clip. |
+| `auto-clip off` | Run `auto-clip off` to disable auto-clip. |
+
+These commands take priority — do not interpret them as questions or conversation. Execute immediately.
+
+## Auto-Clip
+
+At the END of every response, check if `~/.cursor/auto-clip` exists. If it does, run `clip-last` as the very last action. This copies the full exchange to the clipboard automatically so the user always has it ready to paste.
+
+Do NOT skip this step. Do NOT mention it in the response text — just silently run `clip-last` at the end if the flag file exists.
