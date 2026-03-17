@@ -7,16 +7,30 @@ import {
   readSessionLog,
   inspectForCrashedSessions,
   getLastRunningSession,
+  computeResumePoint,
   type SessionLogEntry,
 } from './session-log.js';
+
+const STATE_MD_CURRENT_POSITION = `
+## Current Position
+
+Phase: 2 of 7 (Core Orchestration Loop)
+Plan: 1 of 3 in current phase
+Status: Executing plan
+Last activity: 2026-03-16 — Running 02-01-PLAN.md
+
+Progress: ██░░░░░░░░ 14%
+`;
 
 describe('session-log', () => {
   let logPath: string;
   let tmpDir: string;
+  let stateMdPath: string;
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'session-log-test-'));
     logPath = join(tmpDir, 'session-log.jsonl');
+    stateMdPath = join(tmpDir, 'STATE.md');
   });
 
   afterEach(() => {
@@ -129,6 +143,47 @@ describe('session-log', () => {
     it('returns null when no running', async () => {
       await appendSessionLog(logPath, entry('done'));
       const got = await getLastRunningSession(logPath);
+      expect(got).toBeNull();
+    });
+  });
+
+  describe('computeResumePoint', () => {
+    it('returns null for empty log', async () => {
+      writeFileSync(stateMdPath, STATE_MD_CURRENT_POSITION, 'utf-8');
+      const got = await computeResumePoint(logPath, stateMdPath, 'My Goal');
+      expect(got).toBeNull();
+    });
+
+    it('returns null when goal title mismatch', async () => {
+      writeFileSync(stateMdPath, STATE_MD_CURRENT_POSITION, 'utf-8');
+      await appendSessionLog(logPath, entry('crashed', { goalTitle: 'Other Goal' }));
+      const got = await computeResumePoint(logPath, stateMdPath, 'My Goal');
+      expect(got).toBeNull();
+    });
+
+    it('returns null when STATE.md null and entry missing phase/plan', async () => {
+      await appendSessionLog(logPath, entry('crashed', { goalTitle: 'My Goal', phaseNumber: undefined, planNumber: undefined }));
+      const got = await computeResumePoint(logPath, stateMdPath, 'My Goal');
+      expect(got).toBeNull();
+    });
+
+    it('returns ResumeFrom when STATE.md valid and goal match', async () => {
+      writeFileSync(stateMdPath, STATE_MD_CURRENT_POSITION, 'utf-8');
+      await appendSessionLog(logPath, entry('crashed', { goalTitle: 'My Goal' }));
+      const got = await computeResumePoint(logPath, stateMdPath, 'My Goal');
+      expect(got).toEqual({ phaseNumber: 2, planNumber: 1 });
+    });
+
+    it('returns ResumeFrom from log fallback when STATE.md missing but entry has phase/plan', async () => {
+      await appendSessionLog(logPath, entry('crashed', { goalTitle: 'My Goal', phaseNumber: 3, planNumber: 2 }));
+      const got = await computeResumePoint(logPath, stateMdPath, 'My Goal');
+      expect(got).toEqual({ phaseNumber: 3, planNumber: 2 });
+    });
+
+    it('returns null when firstPendingGoalTitle is empty', async () => {
+      writeFileSync(stateMdPath, STATE_MD_CURRENT_POSITION, 'utf-8');
+      await appendSessionLog(logPath, entry('crashed', { goalTitle: 'My Goal' }));
+      const got = await computeResumePoint(logPath, stateMdPath, '');
       expect(got).toBeNull();
     });
   });

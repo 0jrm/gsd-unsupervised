@@ -1,4 +1,5 @@
 import { readFile, appendFile } from 'node:fs/promises';
+import { readStateMd } from './state-parser.js';
 
 /** Context passed when invoking the agent for session log entries (goal/phase/plan). */
 export interface SessionLogContext {
@@ -86,4 +87,37 @@ export async function inspectForCrashedSessions(
   if (entries.length === 0) return null;
   const last = entries[entries.length - 1];
   return last.status === 'running' || last.status === 'crashed' ? last : null;
+}
+
+/** Resume position for crash recovery; only when unambiguous. */
+export interface ResumeFrom {
+  phaseNumber: number;
+  planNumber: number;
+}
+
+/**
+ * Computes a deterministic resume point when the last session was crashed or running.
+ * Returns null on ambiguity (empty log, goal mismatch, or missing phase/plan).
+ * Prefers STATE.md for position; falls back to log entry phaseNumber/planNumber only if both >= 1.
+ */
+export async function computeResumePoint(
+  sessionLogPath: string,
+  stateMdPath: string,
+  firstPendingGoalTitle: string,
+): Promise<ResumeFrom | null> {
+  const entry = await inspectForCrashedSessions(sessionLogPath);
+  const goalTrim = firstPendingGoalTitle.trim();
+  if (!entry || !goalTrim) return null;
+  if (entry.goalTitle.trim() !== goalTrim) return null;
+
+  const snapshot = await readStateMd(stateMdPath);
+  if (snapshot !== null && snapshot.phaseNumber >= 1 && snapshot.planNumber >= 1) {
+    return { phaseNumber: snapshot.phaseNumber, planNumber: snapshot.planNumber };
+  }
+  const p = entry.phaseNumber;
+  const n = entry.planNumber;
+  if (p !== undefined && n !== undefined && p >= 1 && n >= 1) {
+    return { phaseNumber: p, planNumber: n };
+  }
+  return null;
 }
