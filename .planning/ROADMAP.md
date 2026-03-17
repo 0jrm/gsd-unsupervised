@@ -65,7 +65,7 @@ None
 **Goal**: One-command setup.sh that detects WSL, resolves Windows .cursor path, copies GSD rules, validates the install, and gets the full stack running
 **Depends on**: Phase 6
 **Research**: Unlikely (shell scripting, well-documented WSL path patterns)
-**Plans**: TBD
+**Plans**: 1/2 complete (07-01 WSL script and rules sync; 07-02 validation and smoke checks TBD)
 
 ## Progress
 
@@ -73,11 +73,11 @@ None
 Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
 | Phase | Plans Complete | Status | Completed |
-|-------|---------------|--------|-----------|
+|-------|----------------|--------|-----------|
 | 1. Foundation & CLI Scaffold | 3/3 | Complete | 2026-03-16 |
 | 2. Core Orchestration Loop | 3/3 | Complete | 2026-03-16 |
 | 3. Cursor Agent Integration | 3/3 | Complete | 2026-03-16 |
 | 4. State Monitoring & Phase Transitions | 3/3 | Complete | 2026-03-16 |
 | 5. Crash Detection & Recovery | 4/4 | Complete | 2026-03-17 |
 | 6. Web Dashboard | 3/3 | Complete | 2026-03-16 |
-| 7. WSL Bootstrap & Setup | 0/TBD | Not started | - |
+| 7. WSL Bootstrap & Setup | 1/2 | In progress | - |
