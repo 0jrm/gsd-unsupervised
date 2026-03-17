@@ -19,7 +19,7 @@ None
 - [x] **Phase 3: Cursor Agent Integration** — Spawn cursor-agent headlessly, pipe GSD commands, capture output, handle process lifecycle
 - [x] **Phase 4: State Monitoring & Phase Transitions** — File watching on STATE.md, progress detection, automatic phase advancement
 - [x] **Phase 5: Crash Detection & Recovery** — Process health monitoring, dead agent detection, resume from exact failure point
-- [ ] **Phase 6: Web Dashboard** — Express server, plain HTML/CSS/JS dashboard with live status, progress bars, git feed, token tracking (06-01 complete, 06-02 status API complete)
+- [ ] **Phase 6: Web Dashboard** — Express server, plain HTML/CSS/JS dashboard with live status, progress bars, git feed, token tracking
 - [ ] **Phase 7: WSL Bootstrap & Setup** — setup.sh script, WSL detection, path resolution, GSD rules copy, install validation
 
 ## Phase Details
@@ -40,7 +40,7 @@ None
 **Goal**: Replace stubs with real cursor-agent spawning — invoke it headlessly, pipe GSD commands, capture output, and handle process lifecycle
 **Depends on**: Phase 2
 **Research**: Likely (external tool integration, critical behavioral unknown)
-**Research topics**: cursor-agent CLI interface and headless invocation flags; command piping and output streaming format; **how cursor-agent handles interactive prompts mid-execution** — does it hang, timeout, buffer, or can it be driven non-interactively? This is the #1 unknown that could break the orchestrator design.
+**Research topics**: cursor-agent CLI interface and headless invocation flags; command piping and output streaming format; how cursor-agent handles interactive prompts mid-execution — does it hang, timeout, buffer, or can it be driven non-interactively?
 **Plans**: 3/3 complete
 
 ### Phase 4: State Monitoring & Phase Transitions
@@ -53,25 +53,13 @@ None
 **Goal**: Detect when cursor-agent dies mid-phase, parse STATE.md for last known position, and automatically resume from exactly that point with no lost work. Clean git by default before plans; opt-in checkpoint; deterministic recovery; session-log at project root; docs and tests for recovery.
 **Depends on**: Phase 4
 **Research**: Unlikely (Node.js process management, internal patterns)
-**Plans**: 4 plans (05-01 session log schema + atomic append + inspectForCrashedSessions, 05-02 computeResumePoint + daemon, 05-03 orchestrator resume + clean git + checkpoint + isPlanCompleted, 05-04 tests + docs)
-
-**Ship Phase 5 checklist (sprint ticket):**
-- [ ] Define session-log.jsonl schema and implement atomic append
-- [ ] Write session start/done/crashed entries in cursor-agent invoker
-- [ ] Implement inspectForCrashedSessions() and computeResumePoint()
-- [ ] Implement git checkpoint helper (configurable); require clean tree by default
-- [ ] Implement isPlanCompleted() heuristic (SUMMARY.md exists)
-- [ ] Add unit tests for resume logic and plan completion detection
-- [ ] Add integration test simulating agent crash (CI job)
-- [ ] Update docs (ARCHITECTURE.md, README.md): recovery, config, failure modes, example session-log + STATE.md mapping
-- [ ] Manual run on WSL2 to validate path/process behavior
-- [ ] Release notes and "how to recover manually" for users
+**Plans**: 4/4 complete
 
 ### Phase 6: Web Dashboard
-**Goal**: Mobile-friendly Express dashboard at localhost:3000 with live agent status, per-project progress bars, recent STATE.md updates, git commit feed, cost/token tracking, auto-refresh, and sequential/parallel mode toggle
+**Goal**: Mobile-friendly Express dashboard at localhost:3000 with live agent status, per-project progress bars, recent STATE.md updates, git commit feed, cost/token tracking, auto-refresh, and sequential/parallel mode toggle. Agent-agnostic seam (--agent flag, pluggable factory).
 **Depends on**: Phase 5
 **Research**: Unlikely (Express + plain HTML/CSS/JS, no frameworks, established patterns)
-**Plans**: 3 (06-01 agent-agnostic seam complete; 06-02 status API + dashboard backend complete; 06-03 dashboard UI)
+**Plans**: 3 (06-01 agent-agnostic seam; 06-02 status API + dashboard backend; 06-03 dashboard UI)
 
 ### Phase 7: WSL Bootstrap & Setup
 **Goal**: One-command setup.sh that detects WSL, resolves Windows .cursor path, copies GSD rules, validates the install, and gets the full stack running
@@ -91,5 +79,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Cursor Agent Integration | 3/3 | Complete | 2026-03-16 |
 | 4. State Monitoring & Phase Transitions | 3/3 | Complete | 2026-03-16 |
 | 5. Crash Detection & Recovery | 4/4 | Complete | 2026-03-17 |
-| 6. Web Dashboard | 1/TBD | In progress | - |
+| 6. Web Dashboard | 2/3 | In progress | - |
 | 7. WSL Bootstrap & Setup | 0/TBD | Not started | - |

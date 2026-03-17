@@ -2,7 +2,7 @@
   "mode": "interactive",
   "depth": "standard",
   "parallelization": {
-    "enabled": false,
+    "enabled": true,
     "plan_level": false,
     "task_level": false,
     "skip_checkpoints": false,
