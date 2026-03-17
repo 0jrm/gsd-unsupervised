@@ -50,10 +50,22 @@ None
 **Plans**: 3/3 complete
 
 ### Phase 5: Crash Detection & Recovery
-**Goal**: Detect when cursor-agent dies mid-phase, parse STATE.md for last known position, and automatically resume from exactly that point with no lost work
+**Goal**: Detect when cursor-agent dies mid-phase, parse STATE.md for last known position, and automatically resume from exactly that point with no lost work. Clean git by default before plans; opt-in checkpoint; deterministic recovery; session-log at project root; docs and tests for recovery.
 **Depends on**: Phase 4
 **Research**: Unlikely (Node.js process management, internal patterns)
-**Plans**: 3 plans (05-01 session log enrichment, 05-02 startup resume detection, 05-03 orchestrator resume path)
+**Plans**: 4 plans (05-01 session log schema + atomic append + inspectForCrashedSessions, 05-02 computeResumePoint + daemon, 05-03 orchestrator resume + clean git + checkpoint + isPlanCompleted, 05-04 tests + docs)
+
+**Ship Phase 5 checklist (sprint ticket):**
+- [ ] Define session-log.jsonl schema and implement atomic append
+- [ ] Write session start/done/crashed entries in cursor-agent invoker
+- [ ] Implement inspectForCrashedSessions() and computeResumePoint()
+- [ ] Implement git checkpoint helper (configurable); require clean tree by default
+- [ ] Implement isPlanCompleted() heuristic (SUMMARY.md exists)
+- [ ] Add unit tests for resume logic and plan completion detection
+- [ ] Add integration test simulating agent crash (CI job)
+- [ ] Update docs (ARCHITECTURE.md, README.md): recovery, config, failure modes, example session-log + STATE.md mapping
+- [ ] Manual run on WSL2 to validate path/process behavior
+- [ ] Release notes and "how to recover manually" for users
 
 ### Phase 6: Web Dashboard
 **Goal**: Mobile-friendly Express dashboard at localhost:3000 with live agent status, per-project progress bars, recent STATE.md updates, git commit feed, cost/token tracking, auto-refresh, and sequential/parallel mode toggle
@@ -78,6 +90,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Core Orchestration Loop | 3/3 | Complete | 2026-03-16 |
 | 3. Cursor Agent Integration | 3/3 | Complete | 2026-03-16 |
 | 4. State Monitoring & Phase Transitions | 3/3 | Complete | 2026-03-16 |
-| 5. Crash Detection & Recovery | 0/3 | Not started | - |
+| 5. Crash Detection & Recovery | 0/4 | Not started | - |
 | 6. Web Dashboard | 0/TBD | Not started | - |
 | 7. WSL Bootstrap & Setup | 0/TBD | Not started | - |
