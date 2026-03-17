@@ -15,7 +15,7 @@ None
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Foundation & CLI Scaffold** — Node.js project setup, CLI entry point, config management, goals.md parser
-- [ ] **Phase 2: Core Orchestration Loop** — Sequential goal processing, GSD command sequencing, lifecycle state machine
+- [x] **Phase 2: Core Orchestration Loop** — Sequential goal processing, GSD command sequencing, lifecycle state machine
 - [ ] **Phase 3: Cursor Agent Integration** — Spawn cursor-agent headlessly, pipe GSD commands, capture output, handle process lifecycle
 - [ ] **Phase 4: State Monitoring & Phase Transitions** — File watching on STATE.md, progress detection, automatic phase advancement
 - [ ] **Phase 5: Crash Detection & Recovery** — Process health monitoring, dead agent detection, resume from exact failure point
@@ -34,7 +34,7 @@ None
 **Goal**: State machine that processes goals sequentially, knows the GSD command order (new-project → create-roadmap → plan-phase → execute-plan), and advances through phases — but stubs out the actual agent calls
 **Depends on**: Phase 1
 **Research**: Unlikely (internal state machine logic, standard patterns)
-**Plans**: TBD
+**Plans**: 3/3 complete
 
 ### Phase 3: Cursor Agent Integration
 **Goal**: Replace stubs with real cursor-agent spawning — invoke it headlessly, pipe GSD commands, capture output, and handle process lifecycle
@@ -75,7 +75,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
 | 1. Foundation & CLI Scaffold | 3/3 | Complete | 2026-03-16 |
-| 2. Core Orchestration Loop | 0/TBD | Not started | - |
+| 2. Core Orchestration Loop | 3/3 | Complete | 2026-03-16 |
 | 3. Cursor Agent Integration | 0/TBD | Not started | - |
 | 4. State Monitoring & Phase Transitions | 0/TBD | Not started | - |
 | 5. Crash Detection & Recovery | 0/TBD | Not started | - |
