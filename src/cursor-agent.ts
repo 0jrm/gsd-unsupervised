@@ -11,6 +11,7 @@ import {
 } from './session-log.js';
 import type { CursorStreamEvent } from './stream-events.js';
 import type { AutopilotConfig } from './config.js';
+import { getCursorBinaryPath } from './config/paths.js';
 
 export type { SessionLogContext };
 
@@ -182,7 +183,7 @@ export function createAgentInvoker(
   switch (agentId) {
     case 'cursor':
       return createCursorAgentInvoker({
-        agentPath: config.cursorAgentPath,
+        agentPath: getCursorBinaryPath(config),
         defaultTimeoutMs: config.agentTimeoutMs,
         sessionLogPath: config.sessionLogPath,
         heartbeatPath: path.join(config.workspaceRoot, '.planning', 'heartbeat.txt'),
