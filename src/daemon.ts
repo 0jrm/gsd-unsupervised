@@ -148,6 +148,11 @@ export async function runDaemon(
         logger: createChildLogger(logger, 'state-watcher'),
       });
       watcher.on('state_changed', (payload) => {
+        const event = {
+          type: 'state_changed' as const,
+          previous: payload.previous,
+          current: payload.current,
+        };
         logger.debug(
           {
             phase: payload.current.phaseNumber,
@@ -156,14 +161,28 @@ export async function runDaemon(
           },
           'state_changed',
         );
+        logger.info({ event }, 'progress event');
       });
       watcher.on('phase_advanced', (payload) => {
+        const event = {
+          type: 'phase_advanced' as const,
+          fromPhase: payload.fromPhase,
+          toPhase: payload.toPhase,
+          phaseName: payload.phaseName,
+        };
         logger.info(
           { fromPhase: payload.fromPhase, toPhase: payload.toPhase, phaseName: payload.phaseName },
           'phase_advanced',
         );
+        logger.info({ event }, 'progress event');
       });
       watcher.on('plan_advanced', (payload) => {
+        const event = {
+          type: 'plan_advanced' as const,
+          phaseNumber: payload.phaseNumber,
+          fromPlan: payload.fromPlan,
+          toPlan: payload.toPlan,
+        };
         logger.info(
           {
             phaseNumber: payload.phaseNumber,
@@ -172,15 +191,24 @@ export async function runDaemon(
           },
           'plan_advanced',
         );
+        logger.info({ event }, 'progress event');
       });
       watcher.on('phase_completed', (payload) => {
+        const event = {
+          type: 'phase_completed' as const,
+          phaseNumber: payload.phaseNumber,
+          phaseName: payload.phaseName,
+        };
         logger.info(
           { phaseNumber: payload.phaseNumber, phaseName: payload.phaseName },
           'phase_completed',
         );
+        logger.info({ event }, 'progress event');
       });
       watcher.on('goal_completed', () => {
+        const event = { type: 'goal_completed' as const };
         logger.info('goal_completed');
+        logger.info({ event }, 'progress event');
       });
       watcher.start();
     } catch (err) {
