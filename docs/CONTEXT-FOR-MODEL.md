@@ -79,9 +79,9 @@ Multi-machine orchestration; auth/multi-user dashboard; cost enforcement; cloud 
 
 The orchestrator does **not** call `/gsd/execute-phase`; it drives at plan granularity (execute-plan per PLAN.md). GSD’s own execute-phase can parallelize inside a phase; that’s separate.
 
-### 3.4 Session Log (Crash Recovery Prep)
+### 3.4 Session Log and Crash Recovery
 
-Format: `{"ts":"...","goal":"...","phase":"...","session_id":"...","status":"running|done|crashed"}`. Phase 5 will use “running” to detect interrupted sessions and resume from STATE.md + last git state.
+Format: `{"ts":"...","goal":"...","phase":"...","session_id":"...","status":"running|done|crashed"}`. The daemon uses `computeResumePointer` (session log + STATE.md) to derive the last known successful plan-complete or phase-complete. When the last entry for the goal is `running` or `crashed`, it passes `resumeFrom` to the orchestrator, which skips already-completed work and resumes from the indicated phase/plan. By default the system does not skip ahead; it only resumes when the log and STATE indicate an interrupted run. Re-running a plan after a crash is acceptable; the system will not re-run plans that already have a successful `plan-complete` entry unless the user explicitly opts out (future phase).
 
 ---
 
