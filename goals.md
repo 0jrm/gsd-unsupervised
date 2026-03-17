@@ -5,13 +5,16 @@
 - [ ] Complete Phase 5: Crash Detection & Recovery
 - [ ] 5-crash-detection-recovery
 - Debug & fix STATE.md not updating during GSD lifecycle
-  ### Debug & fix STATE.md not updating
-  **Goal:** Investigate why .planning/STATE.md is not being updated after successful /gsd/new-project, /gsd/create-roadmap, /gsd/plan-phase N, /gsd/execute-plan commands. Propose root cause(s) and concrete fixes (prompt changes, rule updates, orchestrator patches). Implement the most likely fix(es) and verify with a test run.
+
+- Build WhatsApp command/chat interface for autopilot
+  ### WhatsApp command interface
+  **Goal:** Allow sending commands ("status", "pause", "resume", "logs last 10", "stop daemon", "restart") via WhatsApp and get replies (status summary, dashboard link, logs snippet).
   **Success criteria:**
-  1. Run a full minimal lifecycle (/gsd/new-project → /gsd/create-roadmap → /gsd/plan-phase 1 → /gsd/execute-plan ...) and confirm STATE.md shows correct advancing phase/plan/status/progress after each step.
-  2. No more "State mismatch" warnings in orchestrator logs during normal execution.
-  3. Document the cause and fix in PROJECT.md (Decisions section) and in a new SUMMARY.md in a debug phase if needed.
-  4. Test that crash/resume still works after the fix (kill agent mid-plan → restart daemon → resumes correctly).
+  1. Use free Twilio WhatsApp Sandbox (no cost for dev/testing) or self-hosted (Baileys library)
+  2. Simple parser → map text to daemon actions (touch .pause-autopilot for "pause", rm for "resume")
+  3. Secure: only your number + optional PIN
+  4. Reply with dashboard URL (localtunnel/ngrok) + recent logs
+  5. Document setup in README + optional in setup.sh
 
 ### 5-crash-detection-recovery
 **Goal:** Detect any cursor-agent death mid-phase, read last known STATE.md + session-log, resume exactly from the last completed plan/phase with zero lost work.
