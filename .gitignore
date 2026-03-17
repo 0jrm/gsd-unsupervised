@@ -3,3 +3,4 @@ dist/
 *.tgz
 .planning/heartbeat.txt
 session-log.jsonl
+.env
