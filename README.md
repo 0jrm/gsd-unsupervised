@@ -19,6 +19,19 @@ Autonomous orchestrator that drives Cursor's headless agent through the full [GS
 - **cursor-agent** CLI (path configurable; default `agent`)
 - **CURSOR_API_KEY** — Required for live runs. Get from Cursor Dashboard → Cloud Agents → User API Keys. Not required for `--dry-run`.
 
+### WSL Support & Paths
+
+This project is WSL-aware and includes helpers for path resolution when running under WSL2:
+
+- **WSL detection** lives in `src/config/wsl.ts`, which can answer whether the current process is running under WSL and convert `/mnt/<drive>/...` paths to Windows-style `X:\...` paths.
+- **Centralized path resolution** is provided by `src/config/paths.ts`:
+  - `getCursorBinaryPath` chooses the effective Cursor agent binary path, preferring the `GSD_CURSOR_BIN` environment variable, then `cursorAgentPath` from config, and finally falling back to `cursor-agent`. On WSL it can map `/mnt/*` paths to Windows-style paths when needed.
+  - `getClipExePath` resolves a Windows `clip.exe` location when running under WSL (defaulting to `C:\Windows\System32\clip.exe`), or returns `null` when clipboard integration is unavailable.
+  - `getWorkspaceDisplayPath` exposes both the WSL path and, when possible, a corresponding Windows path for the workspace root.
+- **WSL bootstrap** in `src/bootstrap/wsl-bootstrap.ts` wires these helpers together and is invoked from the CLI startup so the daemon has a single place to understand the current environment.
+
+When `clip.exe` cannot be resolved (for example, on non-WSL Linux), clipboard integration should be treated as optional by higher-level tooling: consumers should check for `null` and simply skip clipboard-related features instead of failing daemon startup.
+
 ## Install
 
 ```bash
