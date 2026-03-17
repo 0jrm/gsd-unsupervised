@@ -47,7 +47,7 @@ None
 **Goal**: Chokidar-based file watcher on .planning/STATE.md that detects progress changes and triggers automatic phase advancement in the orchestrator
 **Depends on**: Phase 3
 **Research**: Unlikely (chokidar is well-established, STATE.md parsing is internal logic)
-**Plans**: TBD
+**Plans**: 0/3 planned
 
 ### Phase 5: Crash Detection & Recovery
 **Goal**: Detect when cursor-agent dies mid-phase, parse STATE.md for last known position, and automatically resume from exactly that point with no lost work
@@ -77,7 +77,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 1. Foundation & CLI Scaffold | 3/3 | Complete | 2026-03-16 |
 | 2. Core Orchestration Loop | 3/3 | Complete | 2026-03-16 |
 | 3. Cursor Agent Integration | 3/3 | Complete | 2026-03-16 |
-| 4. State Monitoring & Phase Transitions | 0/TBD | Not started | - |
+| 4. State Monitoring & Phase Transitions | 0/3 | Not started | - |
 | 5. Crash Detection & Recovery | 0/TBD | Not started | - |
 | 6. Web Dashboard | 0/TBD | Not started | - |
 | 7. WSL Bootstrap & Setup | 0/TBD | Not started | - |

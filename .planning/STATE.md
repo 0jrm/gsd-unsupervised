@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-03-16)
 
 **Core value:** The orchestrator loop must never stall, never lose state, and recover from crashes automatically — reliable hands-off goal-to-completion automation is the entire value proposition.
-**Current focus:** Phase 3 — Cursor Agent Integration (complete)
+**Current focus:** Phase 4 — State Monitoring & Phase Transitions (planned)
 
 ## Current Position
 
-Phase: 3 of 7 (Cursor Agent Integration)
-Plan: 3 of 3 in current phase
-Status: Phase complete
-Last activity: 2026-03-16 — Completed 03-03-PLAN.md — Phase 3 complete
+Phase: 4 of 7 (State Monitoring & Phase Transitions)
+Plan: 0 of 3 in current phase
+Status: Planned
+Last activity: 2026-03-16 — Phase 4 planned with 3 plans (TDD parser, watcher + events, daemon/orchestrator wiring)
 
 Progress: ██████░░░░ 43%
 
