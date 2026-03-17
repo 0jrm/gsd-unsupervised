@@ -14,6 +14,11 @@ export const AutopilotConfigSchema = z.object({
    * Expressed as a fraction of total CPU capacity (1.0 = 100% of all cores).
    */
   maxCpuFraction: z.number().min(0.1).max(1).default(0.75),
+  /**
+   * Upper bound on allowed memory usage before new agent work waits.
+   * Expressed as a fraction of total system memory (1.0 = 100% of RAM).
+   */
+  maxMemoryFraction: z.number().min(0.5).max(1).default(0.9),
   verbose: z.boolean().default(false),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   workspaceRoot: z.string().default(process.cwd()),
@@ -93,6 +98,9 @@ function readPlanningOverrides(workspaceRoot: string): Partial<AutopilotConfig> 
     }
     if (typeof parsed.maxCpuFraction === 'number') {
       overrides.maxCpuFraction = parsed.maxCpuFraction;
+    }
+    if (typeof parsed.maxMemoryFraction === 'number') {
+      overrides.maxMemoryFraction = parsed.maxMemoryFraction;
     }
     return overrides;
   } catch {
