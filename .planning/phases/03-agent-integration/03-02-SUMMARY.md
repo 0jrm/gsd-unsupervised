@@ -56,10 +56,10 @@ completed: 2026-03-17
 
 Each task was committed atomically:
 
-1. **Task 1: Fix completion extraction to handle multiple result events and prefer the last terminal result** - `10d0d17` (fix/test)
+1. **Task 1: Fix completion extraction to handle multiple result events and prefer the last terminal result** - `c92c70f` (feat)
 2. **Task 2: Expand parsing coverage for noisy streams (blank lines, non-JSON, partial JSON)** - `10d0d17` (test)
 
-**Plan metadata:** _Included in a later docs commit for this plan_
+**Plan metadata:** `704d27c` (docs: complete plan)
 
 _Note: TDD tasks may have multiple commits (test → feat → refactor)._
 
