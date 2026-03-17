@@ -121,6 +121,7 @@ export async function runDaemon(
   for (let i = 0; i < pending.length; i++) {
     const goal = pending[i];
     currentGoal = goal.title;
+    let plannedUpToPhaseNum = 0;
 
     // Pause/dormant mode: sleep while .pause-autopilot exists
     while (existsSync(pauseFlagPath)) {
@@ -203,8 +204,12 @@ export async function runDaemon(
                 },
                 'onProgress snapshot',
               );
+              if (snapshot.status.startsWith('Planned phase')) {
+                plannedUpToPhaseNum = Math.max(plannedUpToPhaseNum, snapshot.phaseNumber);
+              }
             },
             resumeFrom: i === 0 ? resumeFrom : null,
+            skipToPhase: attempt > 1 && plannedUpToPhaseNum > 0 ? plannedUpToPhaseNum + 1 : null,
           });
           logger.info(
             { goal: goal.title, progress: `${i + 1}/${pending.length}` },
@@ -217,6 +222,12 @@ export async function runDaemon(
             { err, goal: goal.title, attempt, maxAttempts: 3, progress: `${i + 1}/${pending.length}` },
             `Failed goal attempt ${attempt}/3: ${goal.title}`,
           );
+          if (plannedUpToPhaseNum > 0) {
+            logger.info(
+              { goal: goal.title, plannedUpToPhaseNum },
+              'Retry will skip re-planning phases already planned in previous attempt',
+            );
+          }
           if (attempt >= 3) {
             logger.error(
               { goal: goal.title },

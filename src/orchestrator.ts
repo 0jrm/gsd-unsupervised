@@ -110,8 +110,13 @@ export async function orchestrateGoal(options: {
   onProgress?: (snapshot: StateSnapshot) => void;
   /** When set, orchestrator will resume from this phase/plan (used in 05-03). */
   resumeFrom?: ResumeFrom | null;
+  /**
+   * Hint to skip re-running /gsd/plan-phase for phases before this 1-based phase index.
+   * Plans will still be discovered/executed for skipped phases.
+   */
+  skipToPhase?: number | null;
 }): Promise<void> {
-  const { goal, config, isShuttingDown, onProgress, resumeFrom } = options;
+  const { goal, config, isShuttingDown, onProgress, resumeFrom, skipToPhase } = options;
   const logger = createChildLogger(options.logger, 'orchestrator');
   const agentComponent =
     config.agent === 'cursor' ? 'cursor-agent' : config.agent;
@@ -534,41 +539,53 @@ export async function orchestrateGoal(options: {
 
       sm.advance(GoalLifecyclePhase.PlanningPhase);
 
-      const planCmd: GsdCommand = {
-        command: '/gsd/plan-phase',
-        args: String(phase.number),
-        description: `Plan phase ${phase.number}`,
-      };
-      sm.setLastCommand(planCmd);
-      logger.info(
-        { cmd: planCmd.command, phase: phase.number },
-        `Executing: ${planCmd.command} ${planCmd.args}`,
-      );
-      result = await agent(planCmd, config.workspaceRoot, agentLogger, {
-        goalTitle: goal.title,
-        phaseNumber: phaseNum,
-      });
-      if (!result.success) {
-        sm.fail(result.error ?? 'Agent failed');
-        try {
-          await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
-        } catch (smsErr) {
-          logger.warn({ err: smsErr }, 'SMS notification failed');
+      const shouldSkipPlanning =
+        typeof skipToPhase === 'number' && Number.isFinite(skipToPhase) && skipToPhase >= 2
+          ? phaseNum < skipToPhase
+          : false;
+
+      if (shouldSkipPlanning) {
+        logger.info(
+          { phase: phase.number, phaseNum, skipToPhase },
+          'Skipping /gsd/plan-phase due to skipToPhase hint',
+        );
+      } else {
+        const planCmd: GsdCommand = {
+          command: '/gsd/plan-phase',
+          args: String(phase.number),
+          description: `Plan phase ${phase.number}`,
+        };
+        sm.setLastCommand(planCmd);
+        logger.info(
+          { cmd: planCmd.command, phase: phase.number },
+          `Executing: ${planCmd.command} ${planCmd.args}`,
+        );
+        result = await agent(planCmd, config.workspaceRoot, agentLogger, {
+          goalTitle: goal.title,
+          phaseNumber: phaseNum,
+        });
+        if (!result.success) {
+          sm.fail(result.error ?? 'Agent failed');
+          try {
+            await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
+          } catch (smsErr) {
+            logger.warn({ err: smsErr }, 'SMS notification failed');
+          }
+          return;
         }
-        return;
+        await writeDaemonStateMd({
+          stateMdPath,
+          phaseNumber: phaseNum,
+          totalPhases,
+          phaseName: phase.name,
+          planNumber: 0,
+          totalPlans: 0,
+          status: `Planned phase ${phase.number}`,
+          lastActivity: new Date().toISOString(),
+          gitSha: await getGitSha(config.workspaceRoot),
+        });
+        await reportProgress({ expectedPhase: phaseNum });
       }
-      await writeDaemonStateMd({
-        stateMdPath,
-        phaseNumber: phaseNum,
-        totalPhases,
-        phaseName: phase.name,
-        planNumber: 0,
-        totalPlans: 0,
-        status: `Planned phase ${phase.number}`,
-        lastActivity: new Date().toISOString(),
-        gitSha: await getGitSha(config.workspaceRoot),
-      });
-      await reportProgress({ expectedPhase: phaseNum });
 
       const phasesRoot = path.join(config.workspaceRoot, '.planning', 'phases');
       const phaseDir = findPhaseDir(phasesRoot, phase.number);
