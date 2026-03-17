@@ -12,6 +12,7 @@ import {
   inspectForCrashedSessions,
   appendSessionLog,
 } from './session-log.js';
+import { createStatusServer } from './status-server.js';
 
 let shuttingDown = false;
 
@@ -49,6 +50,17 @@ export async function runDaemon(
   const stateMdPath = path.join(config.workspaceRoot, '.planning', 'STATE.md');
   const heartbeatPath = path.join(config.workspaceRoot, '.planning', 'heartbeat.txt');
   const heartbeatTimeoutMs = 60_000;
+
+  let currentGoal: string | null = null;
+  let statusServerClose: (() => Promise<void>) | null = null;
+  if (config.statusServerPort) {
+    const { close } = createStatusServer(config.statusServerPort, () => ({
+      running: !shuttingDown,
+      currentGoal: currentGoal ?? undefined,
+    }));
+    statusServerClose = close;
+    logger.info({ port: config.statusServerPort }, 'Status server listening');
+  }
 
   let resumeFrom: Awaited<ReturnType<typeof computeResumePoint>> = null;
   if (pending.length > 0) {
@@ -89,6 +101,7 @@ export async function runDaemon(
 
   for (let i = 0; i < pending.length; i++) {
     const goal = pending[i];
+    currentGoal = goal.title;
 
     if (shuttingDown) {
       logger.warn('Shutdown requested — stopping after current goal');
@@ -181,6 +194,9 @@ export async function runDaemon(
 
   if (!shuttingDown) {
     logger.info('All goals processed');
+  }
+  if (statusServerClose) {
+    await statusServerClose();
   }
 }
 
