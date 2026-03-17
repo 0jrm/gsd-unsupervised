@@ -1,8 +1,8 @@
 import { EventEmitter } from 'node:events';
 import chokidar, { type FSWatcher } from 'chokidar';
 import type { Logger } from './logger.js';
-import { readStateMd } from './state-parser.js';
-import type { StateSnapshot } from './state-parser.js';
+import { readStateFile } from './state-index.js';
+import type { StateSnapshot } from './state-types.js';
 
 /** Progress event payloads emitted by StateWatcher */
 export type ProgressEvent =
@@ -68,7 +68,7 @@ export class StateWatcher extends EventEmitter {
   private async handleChange(): Promise<void> {
     let snapshot: StateSnapshot | null = null;
     try {
-      snapshot = await readStateMd(this.stateMdPath);
+      snapshot = await readStateFile(this.stateMdPath, this.logger);
     } catch (err) {
       this.logger.warn({ err }, 'StateWatcher read failed, keeping last snapshot');
       return;

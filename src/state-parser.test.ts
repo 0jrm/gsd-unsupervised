@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseStateMd, readStateMd, type StateSnapshot } from './state-parser.js';
+import { parseStateMd, readStateMd } from './state-parser.js';
+import type { StateSnapshot } from './state-types.js';
 
 const STANDARD_BLOCK = `
 ## Current Position
@@ -25,6 +26,7 @@ describe('parseStateMd', () => {
       status: 'Phase complete',
       lastActivity: '2026-03-16 — Completed 03-03-PLAN.md — Phase 3 complete',
       progressPercent: 43,
+      gitSha: null,
     });
   });
 
@@ -178,6 +180,7 @@ Progress: ██████░░░░ 43%
       status: 'Planned',
       lastActivity: '2026-03-16 — Phase 4 planned with 3 plans (TDD parser, watcher + events, daemon/orchestrator wiring)',
       progressPercent: 43,
+      gitSha: null,
     });
   });
 

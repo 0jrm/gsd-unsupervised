@@ -1,20 +1,5 @@
 import { readFile } from 'node:fs/promises';
-
-/**
- * Machine-readable snapshot of the "## Current Position" section of STATE.md.
- * Used by the orchestrator for progress monitoring and by Phase 5 crash recovery
- * to resume from the exact last known position.
- */
-export interface StateSnapshot {
-  phaseNumber: number;
-  totalPhases: number;
-  phaseName: string;
-  planNumber: number;
-  totalPlans: number;
-  status: string;
-  lastActivity: string;
-  progressPercent: number | null;
-}
+import type { StateSnapshot } from './state-types.js';
 
 const SECTION_RE = /## Current Position\n([\s\S]*?)(?=\n## |$)/;
 const PHASE_RE = /^Phase:\s*(\d+)\s+of\s+(\d+)\s*\(([^)]+)\)\s*$/m;
@@ -22,6 +7,7 @@ const PLAN_RE = /^Plan:\s*(\d+)\s+of\s+(\d+)\s+in current phase\s*$/m;
 const STATUS_RE = /^Status:\s*(.+)$/m;
 const LAST_ACTIVITY_RE = /^Last activity:\s*(.+)$/m;
 const PROGRESS_RE = /^Progress:\s*[^\n]*?(\d+)%\s*$/m;
+const GIT_SHA_RE = /^Git SHA:\s*(.+)$/m;
 
 /**
  * Parses the "## Current Position" section of STATE.md into a StateSnapshot.
@@ -74,6 +60,12 @@ export function parseStateMd(content: string): StateSnapshot | null {
     progressPercent = parseInt(progressMatch[1], 10);
   }
 
+  let gitSha: string | null = null;
+  const gitMatch = content.match(GIT_SHA_RE);
+  if (gitMatch && gitMatch[1].trim().length > 0) {
+    gitSha = gitMatch[1].trim();
+  }
+
   return {
     phaseNumber,
     totalPhases,
@@ -83,6 +75,7 @@ export function parseStateMd(content: string): StateSnapshot | null {
     status,
     lastActivity,
     progressPercent,
+    gitSha,
   };
 }
 

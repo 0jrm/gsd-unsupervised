@@ -20,8 +20,8 @@ import {
   getNextUnexecutedPlan,
 } from './roadmap-parser.js';
 import { isWorkingTreeClean, createCheckpoint } from './git.js';
-import { readStateMd } from './state-parser.js';
-import type { StateSnapshot } from './state-parser.js';
+import { readStateFile } from './state-index.js';
+import type { StateSnapshot } from './state-types.js';
 import type { ResumeFrom } from './session-log.js';
 import { sendSms } from './notifier.js';
 import { waitForHeadroom } from './resource-governor.js';
@@ -50,7 +50,7 @@ export async function reportProgress(options: {
 }): Promise<void> {
   const { stateMdPath, logger, onProgress, expectedPhase, expectedSummaryPath } = options;
 
-  const snapshot = await readStateMd(stateMdPath);
+  const snapshot = await readStateFile(stateMdPath, logger);
   if (snapshot === null) return;
 
   if (onProgress) {
