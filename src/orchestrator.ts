@@ -15,6 +15,7 @@ import {
   discoverPlans,
   getNextUnexecutedPlan,
 } from './roadmap-parser.js';
+import { isWorkingTreeClean, createCheckpoint } from './git.js';
 import { readStateMd } from './state-parser.js';
 import type { StateSnapshot } from './state-parser.js';
 import type { ResumeFrom } from './session-log.js';
@@ -50,12 +51,26 @@ export async function orchestrateGoal(options: {
   /** When set, orchestrator will resume from this phase/plan (used in 05-03). */
   resumeFrom?: ResumeFrom | null;
 }): Promise<void> {
-  const { goal, config, isShuttingDown, onProgress } = options;
-  // resumeFrom is consumed in 05-03 (fast-forward and retry)
+  const { goal, config, isShuttingDown, onProgress, resumeFrom } = options;
   const logger = createChildLogger(options.logger, 'orchestrator');
   const agent = options.agent ?? stubAgent;
   const sm = new GoalStateMachine(goal.title);
   const stateMdPath = path.join(config.workspaceRoot, '.planning', 'STATE.md');
+
+  /** Before execute-plan: ensure clean git or create checkpoint when config allows. */
+  async function ensureCleanGitOrCheckpoint(): Promise<void> {
+    if (!config.requireCleanGitBeforePlan) return;
+    const clean = await isWorkingTreeClean(config.workspaceRoot);
+    if (clean) return;
+    if (config.autoCheckpoint) {
+      logger.info('Working tree dirty — creating checkpoint commit');
+      await createCheckpoint(config.workspaceRoot, 'chore(autopilot): checkpoint before plan');
+      return;
+    }
+    throw new Error(
+      'Git working tree is dirty. Commit or stash changes, or set autoCheckpoint: true to create a checkpoint before each plan.',
+    );
+  }
 
   async function reportProgress(expectedPhase: number): Promise<void> {
     if (!onProgress) return;
@@ -71,7 +86,187 @@ export async function orchestrateGoal(options: {
   }
 
   try {
-    // new → initializing_project
+    const roadmapPath = path.join(config.workspaceRoot, '.planning', 'ROADMAP.md');
+
+    if (resumeFrom && resumeFrom.phaseNumber >= 1 && resumeFrom.planNumber >= 1) {
+      const phases = await parseRoadmap(roadmapPath);
+      const totalPhases = phases.length;
+      if (resumeFrom.phaseNumber > totalPhases) {
+        logger.error(
+          { resumeFrom: resumeFrom.phaseNumber, totalPhases },
+          'resumeFrom.phaseNumber out of range',
+        );
+        sm.fail(`resumeFrom phase ${resumeFrom.phaseNumber} exceeds total phases ${totalPhases}`);
+        return;
+      }
+      sm.advance(GoalLifecyclePhase.InitializingProject);
+      sm.advance(GoalLifecyclePhase.CreatingRoadmap);
+      sm.setPhaseInfo(1, totalPhases);
+
+      for (let i = 0; i < resumeFrom.phaseNumber - 1; i++) {
+        if (isShuttingDown()) {
+          logShutdown(logger, sm);
+          return;
+        }
+        sm.advance(GoalLifecyclePhase.PlanningPhase);
+        sm.advance(GoalLifecyclePhase.PhaseComplete);
+        sm.setPhaseInfo(i + 2, totalPhases);
+      }
+
+      const phase = phases[resumeFrom.phaseNumber - 1];
+      const phaseNum = resumeFrom.phaseNumber;
+      sm.advance(GoalLifecyclePhase.PlanningPhase);
+
+      const phasesRoot = path.join(config.workspaceRoot, '.planning', 'phases');
+      const phaseDir = findPhaseDir(phasesRoot, phase.number);
+      if (!phaseDir) {
+        logger.error({ phase: phase.number }, 'Phase directory not found for resume');
+        sm.fail(`Phase directory not found for phase ${phase.number}`);
+        return;
+      }
+
+      let plans = await discoverPlans(phaseDir);
+      const targetPlan = plans.find((p) => p.planNumber === resumeFrom.planNumber);
+      if (!targetPlan) {
+        logger.error(
+          { phaseNumber: resumeFrom.phaseNumber, planNumber: resumeFrom.planNumber, plans: plans.map((p) => p.planNumber) },
+          'Resume target plan not found',
+        );
+        sm.fail(`Plan ${resumeFrom.planNumber} not found in phase ${resumeFrom.phaseNumber}`);
+        return;
+      }
+
+      if (isShuttingDown()) {
+        logShutdown(logger, sm);
+        return;
+      }
+      await ensureCleanGitOrCheckpoint();
+      sm.advance(GoalLifecyclePhase.ExecutingPlan);
+      const execCmd: GsdCommand = {
+        command: '/gsd/execute-plan',
+        args: targetPlan.planPath,
+        description: `Execute plan ${targetPlan.planNumber} (resume retry)`,
+      };
+      sm.setLastCommand(execCmd);
+      logger.info(
+        { cmd: execCmd.command, plan: targetPlan.planNumber },
+        `Resume: ${execCmd.command} ${execCmd.args}`,
+      );
+      let result = await agent(execCmd, config.workspaceRoot, logger, {
+        goalTitle: goal.title,
+        phaseNumber: phaseNum,
+        planNumber: targetPlan.planNumber,
+      });
+      if (!result.success) {
+        sm.fail(result.error ?? 'Agent failed');
+        return;
+      }
+      await reportProgress(phaseNum);
+      sm.setPlanInfo(targetPlan.planNumber + 1, plans.length);
+      plans = await discoverPlans(phaseDir);
+      let nextPlan = getNextUnexecutedPlan(plans);
+
+      while (nextPlan) {
+        if (isShuttingDown()) {
+          logShutdown(logger, sm);
+          return;
+        }
+        await ensureCleanGitOrCheckpoint();
+        sm.advance(GoalLifecyclePhase.ExecutingPlan);
+        const cmd: GsdCommand = {
+          command: '/gsd/execute-plan',
+          args: nextPlan.planPath,
+          description: `Execute plan ${nextPlan.planNumber}`,
+        };
+        sm.setLastCommand(cmd);
+        logger.info({ cmd: cmd.command, plan: nextPlan.planNumber }, `Executing: ${cmd.command} ${cmd.args}`);
+        result = await agent(cmd, config.workspaceRoot, logger, {
+          goalTitle: goal.title,
+          phaseNumber: phaseNum,
+          planNumber: nextPlan.planNumber,
+        });
+        if (!result.success) {
+          sm.fail(result.error ?? 'Agent failed');
+          return;
+        }
+        await reportProgress(phaseNum);
+        sm.setPlanInfo(nextPlan.planNumber + 1, plans.length);
+        plans = await discoverPlans(phaseDir);
+        nextPlan = getNextUnexecutedPlan(plans);
+      }
+
+      sm.advance(GoalLifecyclePhase.PhaseComplete);
+      sm.setPhaseInfo(phaseNum + 1, totalPhases);
+
+      for (let i = phaseNum; i < totalPhases; i++) {
+        if (isShuttingDown()) {
+          logShutdown(logger, sm);
+          return;
+        }
+        const p = phases[i];
+        const pNum = i + 1;
+        sm.advance(GoalLifecyclePhase.PlanningPhase);
+        const planCmd: GsdCommand = {
+          command: '/gsd/plan-phase',
+          args: String(p.number),
+          description: `Plan phase ${p.number}`,
+        };
+        sm.setLastCommand(planCmd);
+        result = await agent(planCmd, config.workspaceRoot, logger, {
+          goalTitle: goal.title,
+          phaseNumber: pNum,
+        });
+        if (!result.success) {
+          sm.fail(result.error ?? 'Agent failed');
+          return;
+        }
+        await reportProgress(pNum);
+        const pDir = findPhaseDir(phasesRoot, p.number);
+        if (!pDir) {
+          sm.advance(GoalLifecyclePhase.PhaseComplete);
+          sm.setPhaseInfo(pNum + 1, totalPhases);
+          continue;
+        }
+        let pPlans = await discoverPlans(pDir);
+        sm.setPlanInfo(1, pPlans.length);
+        let pNext = getNextUnexecutedPlan(pPlans);
+        while (pNext) {
+          if (isShuttingDown()) {
+            logShutdown(logger, sm);
+            return;
+          }
+          await ensureCleanGitOrCheckpoint();
+          sm.advance(GoalLifecyclePhase.ExecutingPlan);
+          const exec: GsdCommand = {
+            command: '/gsd/execute-plan',
+            args: pNext.planPath,
+            description: `Execute plan ${pNext.planNumber}`,
+          };
+          sm.setLastCommand(exec);
+          result = await agent(exec, config.workspaceRoot, logger, {
+            goalTitle: goal.title,
+            phaseNumber: pNum,
+            planNumber: pNext.planNumber,
+          });
+          if (!result.success) {
+            sm.fail(result.error ?? 'Agent failed');
+            return;
+          }
+          await reportProgress(pNum);
+          sm.setPlanInfo(pNext.planNumber + 1, pPlans.length);
+          pPlans = await discoverPlans(pDir);
+          pNext = getNextUnexecutedPlan(pPlans);
+        }
+        sm.advance(GoalLifecyclePhase.PhaseComplete);
+        sm.setPhaseInfo(pNum + 1, totalPhases);
+      }
+
+      sm.advance(GoalLifecyclePhase.Complete);
+      logger.info({ goal: goal.title }, `Goal complete: ${goal.title}`);
+      return;
+    }
+
+    // Normal flow (no resume)
     if (isShuttingDown()) {
       logShutdown(logger, sm);
       return;
@@ -104,7 +299,6 @@ export async function orchestrateGoal(options: {
     sm.advance(GoalLifecyclePhase.CreatingRoadmap);
 
     // creating_roadmap → phase loop
-    const roadmapPath = path.join(config.workspaceRoot, '.planning', 'ROADMAP.md');
     const phases = await parseRoadmap(roadmapPath);
     const totalPhases = phases.length;
     sm.setPhaseInfo(1, totalPhases);
@@ -179,7 +373,7 @@ export async function orchestrateGoal(options: {
           logShutdown(logger, sm);
           return;
         }
-
+        await ensureCleanGitOrCheckpoint();
         sm.advance(GoalLifecyclePhase.ExecutingPlan);
 
         const execCmd: GsdCommand = {
