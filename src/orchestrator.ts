@@ -277,14 +277,16 @@ export async function orchestrateGoal(options: {
               description: `Plan phase ${p.number}`,
             };
             sm.setLastCommand(planCmd);
-            result = await agent(planCmd, config.workspaceRoot, agentLogger, {
+            const planResult = await agent(planCmd, config.workspaceRoot, agentLogger, {
               goalTitle: goal.title,
               phaseNumber: pNum,
             });
-            if (!result.success) {
-              sm.fail(result.error ?? 'Agent failed');
+            if (!planResult.success) {
+              sm.fail(planResult.error ?? 'Agent failed');
               try {
-                await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
+                await sendSms(
+                  `GSD goal failed.\nGoal: ${goal.title}\nError: ${planResult.error ?? 'Agent failed'}`,
+                );
               } catch (smsErr) {
                 logger.warn({ err: smsErr }, 'SMS notification failed');
               }
@@ -330,15 +332,17 @@ export async function orchestrateGoal(options: {
                 description: `Execute plan ${pNext.planNumber}`,
               };
               sm.setLastCommand(exec);
-              result = await agent(exec, config.workspaceRoot, agentLogger, {
+              const execResult = await agent(exec, config.workspaceRoot, agentLogger, {
                 goalTitle: goal.title,
                 phaseNumber: pNum,
                 planNumber: pNext.planNumber,
               });
-              if (!result.success) {
-                sm.fail(result.error ?? 'Agent failed');
+              if (!execResult.success) {
+                sm.fail(execResult.error ?? 'Agent failed');
                 try {
-                  await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
+                  await sendSms(
+                    `GSD goal failed.\nGoal: ${goal.title}\nError: ${execResult.error ?? 'Agent failed'}`,
+                  );
                 } catch (smsErr) {
                   logger.warn({ err: smsErr }, 'SMS notification failed');
                 }
