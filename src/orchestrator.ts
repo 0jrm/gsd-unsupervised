@@ -1,4 +1,8 @@
 import path from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import type { AutopilotConfig } from './config.js';
 import type { Logger } from './logger.js';
 import type { Goal } from './goals.js';
@@ -19,6 +23,62 @@ import { isWorkingTreeClean, createCheckpoint } from './git.js';
 import { readStateMd } from './state-parser.js';
 import type { StateSnapshot } from './state-parser.js';
 import type { ResumeFrom } from './session-log.js';
+import { sendSms } from './notifier.js';
+
+const execFileP = promisify(execFile);
+
+async function getGitSha(workspaceRoot: string): Promise<string> {
+  try {
+    const { stdout } = await execFileP('git', ['rev-parse', 'HEAD'], {
+      cwd: workspaceRoot,
+      encoding: 'utf-8',
+    });
+    const sha = stdout.trim();
+    return sha || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+async function writeDaemonStateMd(options: {
+  stateMdPath: string;
+  phaseNumber: number;
+  totalPhases: number;
+  phaseName: string;
+  planNumber: number;
+  totalPlans: number;
+  status: string;
+  lastActivity: string;
+  gitSha: string;
+}): Promise<void> {
+  const {
+    stateMdPath,
+    phaseNumber,
+    totalPhases,
+    phaseName,
+    planNumber,
+    totalPlans,
+    status,
+    lastActivity,
+    gitSha,
+  } = options;
+
+  const content = [
+    '# STATE',
+    '',
+    '## Current Position',
+    '',
+    `Phase: ${phaseNumber} of ${totalPhases} (${phaseName})`,
+    `Plan: ${planNumber} of ${totalPlans} in current phase`,
+    `Status: ${status}`,
+    `Last activity: ${lastActivity}`,
+    '',
+    `Git SHA: ${gitSha}`,
+    '',
+  ].join('\n');
+
+  await writeFile(stateMdPath, content, 'utf-8');
+}
 
 export interface AgentResult {
   success: boolean;
@@ -75,21 +135,25 @@ export async function orchestrateGoal(options: {
     );
   }
 
-  async function reportProgress(expectedPhase: number): Promise<void> {
+  async function reportProgress(options: { expectedPhase: number; expectedSummaryPath?: string }): Promise<void> {
     if (!onProgress) return;
     const snapshot = await readStateMd(stateMdPath);
     if (snapshot === null) return;
     onProgress(snapshot);
-    if (snapshot.phaseNumber !== expectedPhase) {
-      logger.warn(
-        { expected: expectedPhase, reported: snapshot.phaseNumber },
-        `State mismatch: orchestrator expects phase ${expectedPhase}, STATE.md reports phase ${snapshot.phaseNumber}`,
-      );
+    if (options.expectedSummaryPath) {
+      const ok = existsSync(options.expectedSummaryPath);
+      if (!ok) {
+        logger.warn(
+          { expectedSummaryPath: options.expectedSummaryPath },
+          'Expected SUMMARY file not found after successful agent call',
+        );
+      }
     }
   }
 
   try {
     const roadmapPath = path.join(config.workspaceRoot, '.planning', 'ROADMAP.md');
+    const gitSha = await getGitSha(config.workspaceRoot);
 
     if (resumeFrom && resumeFrom.phaseNumber >= 1 && resumeFrom.planNumber >= 1) {
       const phases = await parseRoadmap(roadmapPath);
@@ -105,6 +169,17 @@ export async function orchestrateGoal(options: {
       sm.advance(GoalLifecyclePhase.InitializingProject);
       sm.advance(GoalLifecyclePhase.CreatingRoadmap);
       sm.setPhaseInfo(1, totalPhases);
+      await writeDaemonStateMd({
+        stateMdPath,
+        phaseNumber: 1,
+        totalPhases,
+        phaseName: phases[0]?.name ?? 'Roadmap',
+        planNumber: 0,
+        totalPlans: 0,
+        status: 'Resuming',
+        lastActivity: new Date().toISOString(),
+        gitSha,
+      });
 
       for (let i = 0; i < resumeFrom.phaseNumber - 1; i++) {
         if (isShuttingDown()) {
@@ -162,9 +237,25 @@ export async function orchestrateGoal(options: {
       });
       if (!result.success) {
         sm.fail(result.error ?? 'Agent failed');
+        try {
+          await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
+        } catch (smsErr) {
+          logger.warn({ err: smsErr }, 'SMS notification failed');
+        }
         return;
       }
-      await reportProgress(phaseNum);
+      await writeDaemonStateMd({
+        stateMdPath,
+        phaseNumber: phaseNum,
+        totalPhases,
+        phaseName: phase.name,
+        planNumber: targetPlan.planNumber,
+        totalPlans: plans.length,
+        status: `Executed plan ${targetPlan.planNumber}`,
+        lastActivity: new Date().toISOString(),
+        gitSha: await getGitSha(config.workspaceRoot),
+      });
+      await reportProgress({ expectedPhase: phaseNum, expectedSummaryPath: targetPlan.summaryPath });
       sm.setPlanInfo(targetPlan.planNumber + 1, plans.length);
       plans = await discoverPlans(phaseDir);
       let nextPlan = getNextUnexecutedPlan(plans);
@@ -190,9 +281,25 @@ export async function orchestrateGoal(options: {
         });
         if (!result.success) {
           sm.fail(result.error ?? 'Agent failed');
+          try {
+            await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
+          } catch (smsErr) {
+            logger.warn({ err: smsErr }, 'SMS notification failed');
+          }
           return;
         }
-        await reportProgress(phaseNum);
+        await writeDaemonStateMd({
+          stateMdPath,
+          phaseNumber: phaseNum,
+          totalPhases,
+          phaseName: phase.name,
+          planNumber: nextPlan.planNumber,
+          totalPlans: plans.length,
+          status: `Executed plan ${nextPlan.planNumber}`,
+          lastActivity: new Date().toISOString(),
+          gitSha: await getGitSha(config.workspaceRoot),
+        });
+        await reportProgress({ expectedPhase: phaseNum, expectedSummaryPath: nextPlan.summaryPath });
         sm.setPlanInfo(nextPlan.planNumber + 1, plans.length);
         plans = await discoverPlans(phaseDir);
         nextPlan = getNextUnexecutedPlan(plans);
@@ -221,9 +328,25 @@ export async function orchestrateGoal(options: {
         });
         if (!result.success) {
           sm.fail(result.error ?? 'Agent failed');
+          try {
+            await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
+          } catch (smsErr) {
+            logger.warn({ err: smsErr }, 'SMS notification failed');
+          }
           return;
         }
-        await reportProgress(pNum);
+        await writeDaemonStateMd({
+          stateMdPath,
+          phaseNumber: pNum,
+          totalPhases,
+          phaseName: p.name,
+          planNumber: 0,
+          totalPlans: 0,
+          status: `Planned phase ${p.number}`,
+          lastActivity: new Date().toISOString(),
+          gitSha: await getGitSha(config.workspaceRoot),
+        });
+        await reportProgress({ expectedPhase: pNum });
         const pDir = findPhaseDir(phasesRoot, p.number);
         if (!pDir) {
           sm.advance(GoalLifecyclePhase.PhaseComplete);
@@ -253,9 +376,25 @@ export async function orchestrateGoal(options: {
           });
           if (!result.success) {
             sm.fail(result.error ?? 'Agent failed');
+            try {
+              await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
+            } catch (smsErr) {
+              logger.warn({ err: smsErr }, 'SMS notification failed');
+            }
             return;
           }
-          await reportProgress(pNum);
+          await writeDaemonStateMd({
+            stateMdPath,
+            phaseNumber: pNum,
+            totalPhases,
+            phaseName: p.name,
+            planNumber: pNext.planNumber,
+            totalPlans: pPlans.length,
+            status: `Executed plan ${pNext.planNumber}`,
+            lastActivity: new Date().toISOString(),
+            gitSha: await getGitSha(config.workspaceRoot),
+          });
+          await reportProgress({ expectedPhase: pNum, expectedSummaryPath: pNext.summaryPath });
           sm.setPlanInfo(pNext.planNumber + 1, pPlans.length);
           pPlans = await discoverPlans(pDir);
           pNext = getNextUnexecutedPlan(pPlans);
@@ -266,6 +405,22 @@ export async function orchestrateGoal(options: {
 
       sm.advance(GoalLifecyclePhase.Complete);
       logger.info({ goal: goal.title }, `Goal complete: ${goal.title}`);
+      await writeDaemonStateMd({
+        stateMdPath,
+        phaseNumber: totalPhases,
+        totalPhases,
+        phaseName: phases[totalPhases - 1]?.name ?? 'Complete',
+        planNumber: 0,
+        totalPlans: 0,
+        status: 'Complete',
+        lastActivity: new Date().toISOString(),
+        gitSha: await getGitSha(config.workspaceRoot),
+      });
+      try {
+        await sendSms(`GSD goal complete.\nGoal: ${goal.title}`);
+      } catch (smsErr) {
+        logger.warn({ err: smsErr }, 'SMS notification failed');
+      }
       return;
     }
 
@@ -280,9 +435,25 @@ export async function orchestrateGoal(options: {
     let result = await agent(initCmd, config.workspaceRoot, agentLogger, { goalTitle: goal.title });
     if (!result.success) {
       sm.fail(result.error ?? 'Agent failed');
+      try {
+        await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
+      } catch (smsErr) {
+        logger.warn({ err: smsErr }, 'SMS notification failed');
+      }
       return;
     }
-    await reportProgress(1);
+    await writeDaemonStateMd({
+      stateMdPath,
+      phaseNumber: 0,
+      totalPhases: 0,
+      phaseName: 'Initializing project',
+      planNumber: 0,
+      totalPlans: 0,
+      status: 'Initialized project',
+      lastActivity: new Date().toISOString(),
+      gitSha: await getGitSha(config.workspaceRoot),
+    });
+    await reportProgress({ expectedPhase: 1 });
     sm.advance(GoalLifecyclePhase.InitializingProject);
 
     // initializing_project → creating_roadmap
@@ -296,9 +467,25 @@ export async function orchestrateGoal(options: {
     result = await agent(roadmapCmd, config.workspaceRoot, agentLogger, { goalTitle: goal.title });
     if (!result.success) {
       sm.fail(result.error ?? 'Agent failed');
+      try {
+        await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
+      } catch (smsErr) {
+        logger.warn({ err: smsErr }, 'SMS notification failed');
+      }
       return;
     }
-    await reportProgress(1);
+    await writeDaemonStateMd({
+      stateMdPath,
+      phaseNumber: 0,
+      totalPhases: 0,
+      phaseName: 'Creating roadmap',
+      planNumber: 0,
+      totalPlans: 0,
+      status: 'Created roadmap',
+      lastActivity: new Date().toISOString(),
+      gitSha: await getGitSha(config.workspaceRoot),
+    });
+    await reportProgress({ expectedPhase: 1 });
     sm.advance(GoalLifecyclePhase.CreatingRoadmap);
 
     // creating_roadmap → phase loop
@@ -334,9 +521,25 @@ export async function orchestrateGoal(options: {
       });
       if (!result.success) {
         sm.fail(result.error ?? 'Agent failed');
+        try {
+          await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
+        } catch (smsErr) {
+          logger.warn({ err: smsErr }, 'SMS notification failed');
+        }
         return;
       }
-      await reportProgress(phaseNum);
+      await writeDaemonStateMd({
+        stateMdPath,
+        phaseNumber: phaseNum,
+        totalPhases,
+        phaseName: phase.name,
+        planNumber: 0,
+        totalPlans: 0,
+        status: `Planned phase ${phase.number}`,
+        lastActivity: new Date().toISOString(),
+        gitSha: await getGitSha(config.workspaceRoot),
+      });
+      await reportProgress({ expectedPhase: phaseNum });
 
       const phasesRoot = path.join(config.workspaceRoot, '.planning', 'phases');
       const phaseDir = findPhaseDir(phasesRoot, phase.number);
@@ -396,9 +599,25 @@ export async function orchestrateGoal(options: {
         });
         if (!result.success) {
           sm.fail(result.error ?? 'Agent failed');
+          try {
+            await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
+          } catch (smsErr) {
+            logger.warn({ err: smsErr }, 'SMS notification failed');
+          }
           return;
         }
-        await reportProgress(phaseNum);
+        await writeDaemonStateMd({
+          stateMdPath,
+          phaseNumber: phaseNum,
+          totalPhases,
+          phaseName: phase.name,
+          planNumber: nextPlan.planNumber,
+          totalPlans: plans.length,
+          status: `Executed plan ${nextPlan.planNumber}`,
+          lastActivity: new Date().toISOString(),
+          gitSha: await getGitSha(config.workspaceRoot),
+        });
+        await reportProgress({ expectedPhase: phaseNum, expectedSummaryPath: nextPlan.summaryPath });
 
         sm.setPlanInfo(nextPlan.planNumber + 1, plans.length);
         plans = await discoverPlans(phaseDir);
@@ -412,10 +631,31 @@ export async function orchestrateGoal(options: {
 
     sm.advance(GoalLifecyclePhase.Complete);
     logger.info({ goal: goal.title }, `Goal complete: ${goal.title}`);
+    await writeDaemonStateMd({
+      stateMdPath,
+      phaseNumber: totalPhases,
+      totalPhases,
+      phaseName: phases[totalPhases - 1]?.name ?? 'Complete',
+      planNumber: 0,
+      totalPlans: 0,
+      status: 'Complete',
+      lastActivity: new Date().toISOString(),
+      gitSha: await getGitSha(config.workspaceRoot),
+    });
+    try {
+      await sendSms(`GSD goal complete.\nGoal: ${goal.title}`);
+    } catch (smsErr) {
+      logger.warn({ err: smsErr }, 'SMS notification failed');
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     sm.fail(message);
     logger.error({ err, goal: goal.title }, `Orchestration failed for goal: ${goal.title}`);
+    try {
+      await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${message}`);
+    } catch (smsErr) {
+      logger.warn({ err: smsErr }, 'SMS notification failed');
+    }
     throw err;
   }
 }

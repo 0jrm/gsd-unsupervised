@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -11,26 +11,16 @@ import {
   type SessionLogEntry,
 } from './session-log.js';
 
-const STATE_MD_CURRENT_POSITION = `
-## Current Position
-
-Phase: 2 of 7 (Core Orchestration Loop)
-Plan: 1 of 3 in current phase
-Status: Executing plan
-Last activity: 2026-03-16 — Running 02-01-PLAN.md
-
-Progress: ██░░░░░░░░ 14%
-`;
-
 describe('session-log', () => {
   let logPath: string;
   let tmpDir: string;
-  let stateMdPath: string;
+  let workspaceRoot: string;
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'session-log-test-'));
     logPath = join(tmpDir, 'session-log.jsonl');
-    stateMdPath = join(tmpDir, 'STATE.md');
+    workspaceRoot = join(tmpDir, 'workspace');
+    mkdirSync(join(workspaceRoot, '.planning', 'phases'), { recursive: true });
   });
 
   afterEach(() => {
@@ -149,41 +139,38 @@ describe('session-log', () => {
 
   describe('computeResumePoint', () => {
     it('returns null for empty log', async () => {
-      writeFileSync(stateMdPath, STATE_MD_CURRENT_POSITION, 'utf-8');
-      const got = await computeResumePoint(logPath, stateMdPath, 'My Goal');
+      const got = await computeResumePoint(logPath, workspaceRoot, 'My Goal');
       expect(got).toBeNull();
     });
 
     it('returns null when goal title mismatch', async () => {
-      writeFileSync(stateMdPath, STATE_MD_CURRENT_POSITION, 'utf-8');
       await appendSessionLog(logPath, entry('crashed', { goalTitle: 'Other Goal' }));
-      const got = await computeResumePoint(logPath, stateMdPath, 'My Goal');
+      const got = await computeResumePoint(logPath, workspaceRoot, 'My Goal');
       expect(got).toBeNull();
     });
 
-    it('returns null when STATE.md null and entry missing phase/plan', async () => {
-      await appendSessionLog(logPath, entry('crashed', { goalTitle: 'My Goal', phaseNumber: undefined, planNumber: undefined }));
-      const got = await computeResumePoint(logPath, stateMdPath, 'My Goal');
-      expect(got).toBeNull();
-    });
+    it('returns ResumeFrom based on first missing SUMMARY file', async () => {
+      // ROADMAP: one phase, incomplete
+      writeFileSync(
+        join(workspaceRoot, '.planning', 'ROADMAP.md'),
+        '- [ ] **Phase 1: Alpha** — Test phase\n',
+        'utf-8',
+      );
+      const phaseDir = join(workspaceRoot, '.planning', 'phases', '01-alpha');
+      mkdirSync(phaseDir, { recursive: true });
+      // Plan 1 executed, plan 2 not executed
+      writeFileSync(join(phaseDir, '01-01-PLAN.md'), '# Plan 1\n', 'utf-8');
+      writeFileSync(join(phaseDir, '01-01-SUMMARY.md'), '# Summary 1\n', 'utf-8');
+      writeFileSync(join(phaseDir, '01-02-PLAN.md'), '# Plan 2\n', 'utf-8');
 
-    it('returns ResumeFrom when STATE.md valid and goal match', async () => {
-      writeFileSync(stateMdPath, STATE_MD_CURRENT_POSITION, 'utf-8');
       await appendSessionLog(logPath, entry('crashed', { goalTitle: 'My Goal' }));
-      const got = await computeResumePoint(logPath, stateMdPath, 'My Goal');
-      expect(got).toEqual({ phaseNumber: 2, planNumber: 1 });
-    });
-
-    it('returns ResumeFrom from log fallback when STATE.md missing but entry has phase/plan', async () => {
-      await appendSessionLog(logPath, entry('crashed', { goalTitle: 'My Goal', phaseNumber: 3, planNumber: 2 }));
-      const got = await computeResumePoint(logPath, stateMdPath, 'My Goal');
-      expect(got).toEqual({ phaseNumber: 3, planNumber: 2 });
+      const got = await computeResumePoint(logPath, workspaceRoot, 'My Goal');
+      expect(got).toEqual({ phaseNumber: 1, planNumber: 2 });
     });
 
     it('returns null when firstPendingGoalTitle is empty', async () => {
-      writeFileSync(stateMdPath, STATE_MD_CURRENT_POSITION, 'utf-8');
       await appendSessionLog(logPath, entry('crashed', { goalTitle: 'My Goal' }));
-      const got = await computeResumePoint(logPath, stateMdPath, '');
+      const got = await computeResumePoint(logPath, workspaceRoot, '');
       expect(got).toBeNull();
     });
   });

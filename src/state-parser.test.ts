@@ -202,11 +202,23 @@ Progress: 10%
 
 describe('readStateMd', () => {
   it('reads and parses existing STATE.md', async () => {
-    const got = await readStateMd('.planning/STATE.md');
+    const { mkdtemp, writeFile, rm, mkdir } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = await mkdtemp(join(tmpdir(), 'state-parser-existing-'));
+    const planningDir = join(dir, '.planning');
+    const statePath = join(planningDir, 'STATE.md');
+    try {
+      await mkdir(planningDir, { recursive: true });
+      await writeFile(statePath, STANDARD_BLOCK, 'utf-8');
+      const got = await readStateMd(statePath);
     expect(got).not.toBeNull();
     expect(typeof got!.phaseNumber).toBe('number');
     expect(typeof got!.totalPhases).toBe('number');
     expect(typeof got!.status).toBe('string');
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('returns null when file is missing', async () => {

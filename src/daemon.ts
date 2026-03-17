@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { existsSync } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { stat, writeFile } from 'node:fs/promises';
 import type { AutopilotConfig } from './config.js';
 import type { Logger } from './logger.js';
 import { createChildLogger } from './logger.js';
@@ -15,6 +15,7 @@ import {
   appendSessionLog,
 } from './session-log.js';
 import { createStatusServer, readPlanningConfig } from './status-server.js';
+import { sendSms } from './notifier.js';
 
 let shuttingDown = false;
 
@@ -104,7 +105,7 @@ export async function runDaemon(
     }
     resumeFrom = await computeResumePoint(
       config.sessionLogPath,
-      stateMdPath,
+      config.workspaceRoot,
       pending[0].title ?? '',
     );
     if (resumeFrom) {
@@ -182,33 +183,70 @@ export async function runDaemon(
     }
 
     try {
-      await orchestrateGoal({
-        goal,
-        config,
-        logger,
-        agent,
-        isShuttingDown: () => shuttingDown,
-        onProgress: (snapshot) => {
-          logger.debug(
-            {
-              phase: snapshot.phaseNumber,
-              plan: snapshot.planNumber,
-              status: snapshot.status,
+      let attempt = 0;
+      // Hard stop + pause after 3 failed attempts on the same goal.
+      while (attempt < 3) {
+        attempt++;
+        try {
+          await orchestrateGoal({
+            goal,
+            config,
+            logger,
+            agent,
+            isShuttingDown: () => shuttingDown,
+            onProgress: (snapshot) => {
+              logger.debug(
+                {
+                  phase: snapshot.phaseNumber,
+                  plan: snapshot.planNumber,
+                  status: snapshot.status,
+                },
+                'onProgress snapshot',
+              );
             },
-            'onProgress snapshot',
+            resumeFrom: i === 0 ? resumeFrom : null,
+          });
+          logger.info(
+            { goal: goal.title, progress: `${i + 1}/${pending.length}` },
+            `Completed goal ${i + 1}/${pending.length}: ${goal.title}`,
           );
-        },
-        resumeFrom: i === 0 ? resumeFrom : null,
-      });
-      logger.info(
-        { goal: goal.title, progress: `${i + 1}/${pending.length}` },
-        `Completed goal ${i + 1}/${pending.length}: ${goal.title}`,
-      );
-    } catch (err) {
-      logger.error(
-        { err, goal: goal.title, progress: `${i + 1}/${pending.length}` },
-        `Failed goal ${i + 1}/${pending.length}: ${goal.title} — continuing to next goal`,
-      );
+          break;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.error(
+            { err, goal: goal.title, attempt, maxAttempts: 3, progress: `${i + 1}/${pending.length}` },
+            `Failed goal attempt ${attempt}/3: ${goal.title}`,
+          );
+          if (attempt >= 3) {
+            logger.error(
+              { goal: goal.title },
+              'Pausing daemon after 3 failed attempts (creating .pause-autopilot)',
+            );
+            try {
+              await writeFile(
+                pauseFlagPath,
+                `Paused after 3 failed attempts for goal: ${goal.title}\nLast error: ${msg}\n`,
+                'utf-8',
+              );
+            } catch {
+              // ignore
+            }
+            try {
+              await sendSms(`GSD daemon paused after 3 retries.\nGoal: ${goal.title}\nError: ${msg}`);
+            } catch (smsErr) {
+              logger.warn({ err: smsErr }, 'SMS notification failed');
+            }
+            // Enter pause loop (same behavior as external pause flag), but we created it.
+            while (existsSync(pauseFlagPath) && !shuttingDown) {
+              logger.info('Pause flag (.pause-autopilot) detected – sleeping 60s');
+              await new Promise((r) => setTimeout(r, 60_000));
+            }
+          }
+        } finally {
+          // Only use resumeFrom on the very first orchestration attempt.
+          resumeFrom = null;
+        }
+      }
     } finally {
       if (watcher) {
         watcher.stop();

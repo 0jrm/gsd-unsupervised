@@ -1,5 +1,6 @@
 import { readFile, appendFile } from 'node:fs/promises';
-import { readStateMd } from './state-parser.js';
+import path from 'node:path';
+import { parseRoadmap, findPhaseDir, discoverPlans, getNextUnexecutedPlan } from './roadmap-parser.js';
 
 /** Context passed when invoking the agent for session log entries (goal/phase/plan). */
 export interface SessionLogContext {
@@ -98,11 +99,11 @@ export interface ResumeFrom {
 /**
  * Computes a deterministic resume point when the last session was crashed or running.
  * Returns null on ambiguity (empty log, goal mismatch, or missing phase/plan).
- * Prefers STATE.md for position; falls back to log entry phaseNumber/planNumber only if both >= 1.
+ * Derives resume point from SUMMARY file existence via roadmap-parser, not from STATE.md.
  */
 export async function computeResumePoint(
   sessionLogPath: string,
-  stateMdPath: string,
+  workspaceRoot: string,
   firstPendingGoalTitle: string,
 ): Promise<ResumeFrom | null> {
   const entry = await inspectForCrashedSessions(sessionLogPath);
@@ -110,14 +111,20 @@ export async function computeResumePoint(
   if (!entry || !goalTrim) return null;
   if (entry.goalTitle.trim() !== goalTrim) return null;
 
-  const snapshot = await readStateMd(stateMdPath);
-  if (snapshot !== null && snapshot.phaseNumber >= 1 && snapshot.planNumber >= 1) {
-    return { phaseNumber: snapshot.phaseNumber, planNumber: snapshot.planNumber };
+  const roadmapPath = path.join(workspaceRoot, '.planning', 'ROADMAP.md');
+  const phasesRoot = path.join(workspaceRoot, '.planning', 'phases');
+
+  const phases = await parseRoadmap(roadmapPath);
+  for (let i = 0; i < phases.length; i++) {
+    const phase = phases[i];
+    const phaseDir = findPhaseDir(phasesRoot, phase.number);
+    if (!phaseDir) continue;
+    const plans = await discoverPlans(phaseDir);
+    const next = getNextUnexecutedPlan(plans);
+    if (next) {
+      return { phaseNumber: i + 1, planNumber: next.planNumber };
+    }
   }
-  const p = entry.phaseNumber;
-  const n = entry.planNumber;
-  if (p !== undefined && n !== undefined && p >= 1 && n >= 1) {
-    return { phaseNumber: p, planNumber: n };
-  }
+
   return null;
 }
