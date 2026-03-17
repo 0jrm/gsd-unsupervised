@@ -203,8 +203,50 @@ describe('StateWatcher', () => {
     expect(advanced.toPlan).toBe(1);
   });
 
+  it('ignores no-op updates where only lastActivity changes', async () => {
+    const baseBlock = buildStateBlock({
+      phaseNumber: 4,
+      totalPhases: 7,
+      phaseName: 'State Monitoring & Phase Transitions',
+      planNumber: 1,
+      totalPlans: 2,
+      status: 'Executing plan',
+      progressPercent: 50,
+    });
+
+    writeState(baseBlock);
+    watcher = createWatcher();
+
+    await waitForEvent(watcher, 'ready');
+
+    const events: Array<{
+      previous: unknown;
+      current: { phaseNumber: number; planNumber: number };
+    }> = [];
+    watcher.on('state_changed', (payload) => {
+      events.push(payload);
+    });
+
+    const updatedBlock = buildStateBlock({
+      phaseNumber: 4,
+      totalPhases: 7,
+      phaseName: 'State Monitoring & Phase Transitions',
+      planNumber: 1,
+      totalPlans: 2,
+      status: 'Executing plan',
+      progressPercent: 50,
+      lastActivity: new Date(Date.now() + 1000).toISOString(),
+    });
+
+    writeState(updatedBlock);
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // No additional state_changed event should be emitted for a no-op update.
+    expect(events.length).toBe(0);
+  });
+
   // Note: Additional behaviors such as phase_completed and goal_completed are
   // exercised indirectly via higher-level daemon/orchestrator tests that use
   // a real StateWatcher instance against a live STATE.md.
 });
-

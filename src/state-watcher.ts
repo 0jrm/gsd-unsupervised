@@ -81,6 +81,30 @@ export class StateWatcher extends EventEmitter {
 
     const previous = this.lastSnapshot;
 
+    if (previous !== null) {
+      const isNoop =
+        previous.phaseNumber === snapshot.phaseNumber &&
+        previous.totalPhases === snapshot.totalPhases &&
+        previous.phaseName === snapshot.phaseName &&
+        previous.planNumber === snapshot.planNumber &&
+        previous.totalPlans === snapshot.totalPlans &&
+        previous.status === snapshot.status &&
+        (previous.progressPercent ?? null) === (snapshot.progressPercent ?? null) &&
+        (previous.gitSha ?? null) === (snapshot.gitSha ?? null);
+
+      if (isNoop) {
+        this.logger.debug(
+          {
+            phase: snapshot.phaseNumber,
+            plan: snapshot.planNumber,
+            status: snapshot.status,
+          },
+          'state_noop',
+        );
+        return;
+      }
+    }
+
     if (previous === null) {
       this.emit('ready', snapshot);
       this.logger.info({ path: this.stateMdPath }, 'STATE.md first detected');
