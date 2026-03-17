@@ -121,10 +121,14 @@ export function isPhaseComplete(plans: PlanInfo[]): boolean {
 
 /**
  * Returns true iff the plan's SUMMARY file exists (auditable plan completion).
- * Same heuristic as discoverPlans: plan N-M-PLAN.md → N-M-SUMMARY.md.
+ * Same heuristic as discoverPlans: plan XX-N-PLAN.md → XX-N-SUMMARY.md (N may be zero-padded).
  */
 export function isPlanCompleted(phaseDir: string, planNumber: number): boolean {
   const plans = readdirSync(phaseDir);
-  const suffix = `-${planNumber}-SUMMARY.md`;
-  return plans.some((name) => name.endsWith(suffix) && existsSync(join(phaseDir, name)));
+  const summarySuffixRe = new RegExp(`-(\\d+)-SUMMARY\\.md$`);
+  return plans.some((name) => {
+    const m = name.match(summarySuffixRe);
+    if (!m) return false;
+    return parseInt(m[1], 10) === planNumber && existsSync(join(phaseDir, name));
+  });
 }

@@ -8,7 +8,8 @@ Autonomous orchestrator that drives Cursor's headless agent through the full [GS
 - **GSD lifecycle** — Runs `/gsd/new-project` → `/gsd/create-roadmap` → `/gsd/plan-phase` → `/gsd/execute-plan` (and related commands) in the correct order.
 - **Cursor agent integration** — Spawns `cursor-agent` headlessly, streams commands, and handles process lifecycle (timeouts, tree-kill on shutdown).
 - **State monitoring** — Watches `.planning/STATE.md` for phase/plan progress and emits events (phase_advanced, plan_advanced, phase_completed, goal_completed).
-- **Planned** — Crash detection & recovery, web dashboard, WSL bootstrap (see [Roadmap](#roadmap)).
+- **Crash detection & recovery** — Session log at project root, resume from exact phase/plan on next run, heartbeat for liveness (see [Crash detection and recovery](#crash-detection-and-recovery)).
+- **Planned** — Web dashboard, WSL bootstrap (see [Roadmap](#roadmap)).
 
 ## Prerequisites
 
@@ -51,6 +52,7 @@ export CURSOR_API_KEY=your_key_here
 | `--dry-run` | `false` | Parse goals and show plan only; no agent calls |
 | `--agent-path <path>` | `agent` | Path to cursor-agent binary |
 | `--agent-timeout <ms>` | `600000` | Agent invocation timeout (ms) |
+| `--status-server <port>` | — | Enable HTTP status server (GET / or /status returns JSON) |
 
 ### Goals file (`goals.md`)
 
@@ -86,6 +88,9 @@ Config can come from a JSON file (`--config`) and is overridden by CLI options. 
 | `agentTimeoutMs` | `600000` | Agent timeout (≥ 10000) |
 | `sessionLogPath` | `"./session-log.jsonl"` | Session log file |
 | `stateWatchDebounceMs` | `500` | STATE.md watcher debounce (≥ 100) |
+| `requireCleanGitBeforePlan` | `true` | Refuse execute-plan when git working tree is dirty |
+| `autoCheckpoint` | `false` | When true and tree dirty, create a checkpoint commit before plan |
+| `statusServerPort` | — | When set, start HTTP status server on this port |
 
 Example `.autopilot/config.json`:
 
@@ -121,6 +126,35 @@ Example `.autopilot/config.json`:
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module roles and data flow.
 
+## Crash detection and recovery
+
+The daemon appends one JSON line per agent run to **session-log.jsonl** at the project root (config `sessionLogPath`, default `./session-log.jsonl`). Each entry includes `goalTitle`, `phaseNumber`, `planNumber`, and `status` (`running` | `done` | `crashed` | `timeout`). On startup, if the last entry is `running` or `crashed` and the first pending goal matches, the daemon computes a resume point from STATE.md (or the log) and passes it to the orchestrator, which re-runs only that plan then continues.
+
+**Example session-log.jsonl (2 lines):**
+
+```jsonl
+{"timestamp":"2026-03-17T12:00:00.000Z","goalTitle":"Complete Phase 5","phase":"/gsd/execute-plan","phaseNumber":2,"planNumber":1,"sessionId":null,"command":"/gsd/execute-plan .planning/phases/02-x/02-01-PLAN.md","status":"running"}
+{"timestamp":"2026-03-17T12:05:00.000Z","goalTitle":"Complete Phase 5","phase":"/gsd/execute-plan","phaseNumber":2,"planNumber":1,"sessionId":"abc","command":"/gsd/execute-plan .planning/phases/02-x/02-01-PLAN.md","status":"crashed","durationMs":300000,"error":"Agent exited with code 1"}
+```
+
+**Corresponding STATE.md Current Position (when crash occurred):**
+
+```markdown
+## Current Position
+Phase: 2 of 7 (Core Orchestration Loop)
+Plan: 1 of 3 in current phase
+Status: Executing plan
+Last activity: 2026-03-17 — Running 02-01-PLAN.md
+Progress: ██░░░░░░░░ 14%
+```
+
+Resume uses this to re-run `execute-plan` for phase 2 plan 1 only, then continue.
+
+- **requireCleanGitBeforePlan** (default `true`): the orchestrator refuses to run `execute-plan` when the git working tree has uncommitted changes, unless **autoCheckpoint** is `true`, in which case it creates a checkpoint commit first.
+- **How to recover manually:** (1) Inspect `session-log.jsonl` (last line = last run; `status` `crashed` or `running`). (2) Read `.planning/STATE.md` for "Current Position" (phase/plan). (3) Either run the daemon again with the same goal so it resumes automatically, or run `/gsd/execute-plan .planning/phases/<phase-dir>/<phase>-<plan>-PLAN.md` for the failed plan.
+
+**Status server and heartbeat:** Use `--status-server <port>` to expose a JSON status endpoint (GET / or /status) for dashboards. While the agent runs, `.planning/heartbeat.txt` is updated every 15s; if it’s missing or older than 60s with a `running` session, the next startup treats it as a crash and can resume.
+
 ## Development
 
 ```bash
@@ -129,7 +163,7 @@ npm test         # Run tests (Vitest)
 npm run dev      # Watch build
 ```
 
-Tests include state parser, stream events, and lifecycle; run with `npm test` or `npm test -- state-parser`.
+Tests include state parser, stream events, lifecycle, session-log, roadmap-parser, status-server, and resume integration. Run with `npm test` or `npm test -- state-parser`. Integration tests (crash/resume): `npm run test:integration`.
 
 ## Roadmap
 
@@ -139,7 +173,7 @@ Tests include state parser, stream events, and lifecycle; run with `npm test` or
 | 2. Orchestration loop | ✅ | Sequential goals, GSD command order, lifecycle state machine |
 | 3. Cursor agent | ✅ | Headless cursor-agent, streaming, process lifecycle |
 | 4. State monitoring | ✅ | STATE.md watcher, progress events, daemon wiring |
-| 5. Crash detection | 🔲 | Detect dead agent, resume from STATE.md |
+| 5. Crash detection | ✅ | Session log, resume from phase/plan, heartbeat, clean git, status server |
 | 6. Web dashboard | 🔲 | Live status, progress, git feed at localhost:3000 |
 | 7. WSL bootstrap | 🔲 | setup.sh, GSD rules copy, one-command install |
 

@@ -38,6 +38,22 @@ High-level module roles and data flow for contributors. For product overview and
 - **Single invoker per run** — One cursor-agent invoker is created in the daemon and reused for all goals in the run.
 - **Per-goal watcher** — Each goal gets its own StateWatcher, started before and stopped after orchestrateGoal.
 
+## Crash detection and recovery
+
+- **Session log** — Append-only `session-log.jsonl` at project root (config `sessionLogPath`). One JSON object per line: `timestamp`, `goalTitle`, `phase`, `phaseNumber`, `planNumber`, `sessionId`, `command`, `status` (`running` | `done` | `crashed` | `timeout`), optional `durationMs`, `error`. The cursor-agent invoker writes a `running` entry before each run and `done` / `crashed` / `timeout` on exit.
+- **inspectForCrashedSessions(logPath)** — Returns the most recent log entry if its status is `running` or `crashed`, else `null`. Used at daemon startup to detect an interrupted session.
+- **computeResumePoint(sessionLogPath, stateMdPath, firstPendingGoalTitle)** — Returns `ResumeFrom { phaseNumber, planNumber }` only when unambiguous: goal title matches first pending goal, and position comes from STATE.md (preferred) or from the log entry’s `phaseNumber`/`planNumber` when both ≥ 1. Returns `null` on empty log, goal mismatch, or ambiguous position (no silent skip).
+- **Resume path** — When the daemon passes `resumeFrom` to the orchestrator, it fast-forwards (no agent calls) to that phase/plan, runs one `execute-plan` (retry), then continues with the normal plan loop and remaining phases.
+- **Heartbeat** — While the agent runs, a heartbeat file (`.planning/heartbeat.txt`) is updated periodically. If the last log entry is `running` and the heartbeat is missing or older than 60s, the daemon treats it as a crash (appends a `crashed` entry) so the next startup can resume.
+- **Config** — `requireCleanGitBeforePlan` (default `true`): refuse `execute-plan` when the working tree is dirty. `autoCheckpoint` (default `false`): when enabled and tree is dirty, create a checkpoint commit before running the plan. `sessionLogPath`: path to the session log file.
+
+**Failure modes:** Agent crash (non-zero exit or throw) → log entry `crashed`; next start resumes when unambiguous. Timeout → log entry `timeout`; no resume from that entry. Dirty git → orchestrator aborts (or creates checkpoint if `autoCheckpoint`). Ambiguous resume (e.g. STATE.md null and log missing phase/plan) → `computeResumePoint` returns `null`; run starts from scratch.
+
+## Status server and heartbeat
+
+- **Status server** — When `statusServerPort` is set (or `--status-server <port>`), the daemon starts a minimal HTTP server (node:http only). `GET /` and `GET /status` return JSON: `{ running, currentGoal?, phaseNumber?, planNumber?, heartbeat? }`. Suitable for phone/dashboard consumers.
+- **Heartbeat** — The invoker writes `.planning/heartbeat.txt` with an ISO timestamp every 15s while the agent runs and removes it on done/crashed/timeout. Missing or stale (>60s) heartbeat with a `running` session is treated as a crash for resume.
+
 ## GSD as black box
 
 The orchestrator drives GSD only via commands and file system: it writes no GSD internals, and reads only ROADMAP.md, STATE.md, and phase/plan files under `.planning/`. GSD rules live in `.cursor/rules/` and are not modified by this project.
