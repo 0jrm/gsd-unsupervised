@@ -68,6 +68,12 @@ The orchestrator loop must never stall, never lose state, and recover from crash
 | Interactive for planning, YOLO for execution | Human reviews phase plans but execution runs hands-off | — Pending |
 
 ---
+
+## Environment / Bootstrap (Phase 7)
+
+A one-command WSL bootstrap is provided by `setup.sh` at the project root. It detects WSL2, resolves the Windows `.cursor` path (`/mnt/c/Users/<user>/.cursor`), and syncs GSD rules into the repo’s `.cursor/rules`. Run `./setup.sh` or `bash setup.sh` from the repo root; use `--check-env` or `--check-cursor` to verify without making changes.
+
+---
 *Last updated: 2026-03-16 after initialization*
 
 ## Vision Update – 2026-03-16 (Agent-Agnostic + Dashboard)
