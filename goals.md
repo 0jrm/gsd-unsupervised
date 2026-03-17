@@ -5,6 +5,7 @@
 - [ ] Complete Phase 5: Crash Detection & Recovery
 - [ ] 5-crash-detection-recovery
 - Debug & fix STATE.md not updating during GSD lifecycle
+- [ ] Add recursive subagent support: daemon can spawn cursor-agent subprocess for complex plans, subagent can spawn further specialist agents. Use existing invocation pattern: cursor-agent --workspace <path> "<prompt>". Wire into orchestrator as an optional execution mode per plan.
 
 - Build WhatsApp command/chat interface for autopilot
   ### WhatsApp command interface

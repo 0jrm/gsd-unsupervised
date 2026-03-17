@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -430,17 +430,29 @@ export async function orchestrateGoal(options: {
       return;
     }
     const initCmd = sm.getNextCommand()!;
-    sm.setLastCommand(initCmd);
-    logger.info({ cmd: initCmd.command }, `Executing: ${initCmd.command}`);
-    let result = await agent(initCmd, config.workspaceRoot, agentLogger, { goalTitle: goal.title });
-    if (!result.success) {
-      sm.fail(result.error ?? 'Agent failed');
-      try {
-        await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
-      } catch (smsErr) {
-        logger.warn({ err: smsErr }, 'SMS notification failed');
+    const projectMdPath = path.join(config.workspaceRoot, '.planning', 'PROJECT.md');
+    const alreadyInitialized = await stat(projectMdPath)
+      .then(() => true)
+      .catch(() => false);
+    let result: AgentResult = { success: true };
+    if (!alreadyInitialized) {
+      sm.setLastCommand(initCmd);
+      logger.info({ cmd: initCmd.command }, `Executing: ${initCmd.command}`);
+      result = await agent(initCmd, config.workspaceRoot, agentLogger, { goalTitle: goal.title });
+      if (!result.success) {
+        sm.fail(result.error ?? 'Agent failed');
+        try {
+          await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
+        } catch (smsErr) {
+          logger.warn({ err: smsErr }, 'SMS notification failed');
+        }
+        return;
       }
-      return;
+    } else {
+      logger.info(
+        { projectMdPath },
+        'Project already initialized — skipping /gsd/new-project',
+      );
     }
     await writeDaemonStateMd({
       stateMdPath,
@@ -462,17 +474,28 @@ export async function orchestrateGoal(options: {
       return;
     }
     const roadmapCmd = sm.getNextCommand()!;
-    sm.setLastCommand(roadmapCmd);
-    logger.info({ cmd: roadmapCmd.command }, `Executing: ${roadmapCmd.command}`);
-    result = await agent(roadmapCmd, config.workspaceRoot, agentLogger, { goalTitle: goal.title });
-    if (!result.success) {
-      sm.fail(result.error ?? 'Agent failed');
-      try {
-        await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
-      } catch (smsErr) {
-        logger.warn({ err: smsErr }, 'SMS notification failed');
+    const roadmapMdPath = path.join(config.workspaceRoot, '.planning', 'ROADMAP.md');
+    const alreadyHasRoadmap = await stat(roadmapMdPath)
+      .then(() => true)
+      .catch(() => false);
+    if (!alreadyHasRoadmap) {
+      sm.setLastCommand(roadmapCmd);
+      logger.info({ cmd: roadmapCmd.command }, `Executing: ${roadmapCmd.command}`);
+      result = await agent(roadmapCmd, config.workspaceRoot, agentLogger, { goalTitle: goal.title });
+      if (!result.success) {
+        sm.fail(result.error ?? 'Agent failed');
+        try {
+          await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
+        } catch (smsErr) {
+          logger.warn({ err: smsErr }, 'SMS notification failed');
+        }
+        return;
       }
-      return;
+    } else {
+      logger.info(
+        { roadmapMdPath },
+        'Roadmap already exists — skipping /gsd/create-roadmap',
+      );
     }
     await writeDaemonStateMd({
       stateMdPath,
