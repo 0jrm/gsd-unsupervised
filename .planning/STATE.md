@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-03-17)
 Phase: 1 of 7 (Foundation)
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-03-17 — Roadmap created (YOLO replace)
+Last activity: 2026-03-17 — Roadmap replaced (YOLO)
 
 Progress: ░░░░░░░░░░ 0%
 
@@ -53,5 +53,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-17
-Stopped at: Roadmap created (YOLO); ready to plan Phase 1
+Stopped at: Roadmap replaced (YOLO); ready to plan Phase 1
 Resume file: None

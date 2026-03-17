@@ -62,7 +62,7 @@ Plans:
 **Goal**: STATE.md watching, state parser, phase transition detection, progress events.
 **Depends on**: Phase 3
 **Research**: Unlikely (file watching, existing patterns)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
 - [ ] 04-01: STATE.md watcher and parser
