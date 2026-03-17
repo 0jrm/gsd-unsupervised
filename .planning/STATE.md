@@ -2,7 +2,7 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-16); ROADMAP recreated 2026-03-17 (create-roadmap replace, YOLO)
+See: .planning/PROJECT.md (updated 2026-03-16); ROADMAP recreated 2026-03-17 (create-roadmap replace, YOLO non-interactive)
 
 **Core value:** The orchestrator loop must never stall, never lose state, and recover from crashes automatically — reliable hands-off goal-to-completion automation is the entire value proposition.
 **Current focus:** Milestone complete — Phase 7 done.
