@@ -10,7 +10,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/cli.js",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "vitest run"
   },
   "engines": {
     "node": ">=18"
@@ -18,12 +19,13 @@
   "license": "MIT",
   "dependencies": {
     "commander": "^13.1.0",
-    "zod": "^3.24.0",
     "pino": "^9.6.0",
-    "pino-pretty": "^13.0.0"
+    "pino-pretty": "^13.0.0",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@types/node": "^22.13.0",
     "typescript": "^5.7.0",
-    "@types/node": "^22.13.0"
+    "vitest": "^4.1.0"
   }
 }
