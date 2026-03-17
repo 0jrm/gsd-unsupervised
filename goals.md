@@ -6,6 +6,9 @@
 - [ ] 5-crash-detection-recovery
 - Debug & fix STATE.md not updating during GSD lifecycle
 - [ ] Add recursive subagent support: daemon can spawn cursor-agent subprocess for complex plans, subagent can spawn further specialist agents. Use existing invocation pattern: cursor-agent --workspace <path> "<prompt>". Wire into orchestrator as an optional execution mode per plan.
+- [ ] Add GPU guard to resource-governor (maxGpuFraction + gpuLoadCommand, surfaced in /api/status)
+- [ ] Tighten agent support messaging (Cursor as v1.0 default; clearly mark other agents as experimental)
+- [ ] Publish gsd-unsupervised v1.0.0 to npm and document npm-based install/usage
 
 - Build WhatsApp command/chat interface for autopilot
   ### WhatsApp command interface
