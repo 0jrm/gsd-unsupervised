@@ -7,6 +7,7 @@ import { loadConfig } from './config.js';
 import { loadGoals, getPendingGoals } from './goals.js';
 import { runDaemon, registerShutdownHandlers } from './daemon.js';
 import { validateCursorApiKey } from './cursor-agent.js';
+import { applyWslBootstrap } from './bootstrap/wsl-bootstrap.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -57,6 +58,17 @@ program
       });
 
       log.debug({ config }, 'Configuration loaded');
+
+      const resolvedEnv = applyWslBootstrap(config);
+      log.debug(
+        {
+          isWsl: resolvedEnv.isWsl,
+          cursorBinaryPath: resolvedEnv.cursorBinaryPath,
+          clipExePath: resolvedEnv.clipExePath ?? undefined,
+          workspace: resolvedEnv.workspace,
+        },
+        'Resolved environment for current platform',
+      );
 
       if (!(opts.dryRun as boolean) && config.agent === 'cursor') {
         try {
