@@ -115,8 +115,14 @@ export async function orchestrateGoal(options: {
       const phasesRoot = path.join(config.workspaceRoot, '.planning', 'phases');
       const phaseDir = findPhaseDir(phasesRoot, phase.number);
       if (!phaseDir) {
-        sm.fail(`Phase directory not found for phase ${phase.number}`);
-        return;
+        logger.warn(
+          { phase: phase.number },
+          `Phase directory not found for phase ${phase.number} — skipping`,
+        );
+        sm.advance(GoalLifecyclePhase.PhaseComplete);
+        logger.info({ phase: phase.number }, `Phase ${phase.number} complete (no directory)`);
+        sm.setPhaseInfo(phaseNum + 1, totalPhases);
+        continue;
       }
 
       let plans = await discoverPlans(phaseDir);
@@ -127,6 +133,18 @@ export async function orchestrateGoal(options: {
       );
 
       let nextPlan = getNextUnexecutedPlan(plans);
+
+      if (!nextPlan) {
+        logger.info(
+          { phase: phase.number },
+          `Phase ${phase.number} has no unexecuted plans — skipping to complete`,
+        );
+        sm.advance(GoalLifecyclePhase.PhaseComplete);
+        logger.info({ phase: phase.number }, `Phase ${phase.number} complete`);
+        sm.setPhaseInfo(phaseNum + 1, totalPhases);
+        continue;
+      }
+
       while (nextPlan) {
         if (isShuttingDown()) {
           logShutdown(logger, sm);

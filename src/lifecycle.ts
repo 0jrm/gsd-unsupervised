@@ -30,7 +30,7 @@ export const LIFECYCLE_TRANSITIONS: Record<GoalLifecyclePhase, GoalLifecyclePhas
   [GoalLifecyclePhase.New]: [GoalLifecyclePhase.InitializingProject],
   [GoalLifecyclePhase.InitializingProject]: [GoalLifecyclePhase.CreatingRoadmap],
   [GoalLifecyclePhase.CreatingRoadmap]: [GoalLifecyclePhase.PlanningPhase],
-  [GoalLifecyclePhase.PlanningPhase]: [GoalLifecyclePhase.ExecutingPlan],
+  [GoalLifecyclePhase.PlanningPhase]: [GoalLifecyclePhase.ExecutingPlan, GoalLifecyclePhase.PhaseComplete],
   [GoalLifecyclePhase.ExecutingPlan]: [GoalLifecyclePhase.ExecutingPlan, GoalLifecyclePhase.PhaseComplete],
   [GoalLifecyclePhase.PhaseComplete]: [GoalLifecyclePhase.PlanningPhase, GoalLifecyclePhase.Complete],
   [GoalLifecyclePhase.Complete]: [],
