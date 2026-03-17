@@ -2,10 +2,37 @@
 
 High-level module roles and data flow for contributors. For product overview and usage, see [README.md](../README.md).
 
+## Agent-agnostic invoker seam
+
+The orchestrator drives GSD via an **AgentInvoker** function-type seam: it does not depend on any specific AI agent implementation. A factory `createAgentInvoker(agentId, config)` returns the appropriate adapter:
+
+- **cursor** — Full implementation: spawns `cursor-agent` with NDJSON streaming, heartbeat, session logging.
+- **claude-code**, **gemini-cli**, **codex** — Thin stubs (TODO) with the same call signature and NDJSON/heartbeat assumptions; non-throwing.
+
+**Rationale:** Decouples orchestrator core (heartbeat, resume, status server, git checkpoints) from any single agent so Phase 6+ features (dashboard, bootstrap) work with Cursor today and other agents later.
+
+```
+┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│ Orchestrator│────▶│ createAgentInvoker│────▶│ cursor-agent    │
+│             │     │ (agentId, config) │     │ claude-code     │
+│             │     │                  │     │ gemini-cli      │
+│             │     │                  │     │ codex (stubs)   │
+└─────────────┘     └──────────────────┘     └─────────────────┘
+       │                       │                       │
+       │                       │                       ▼
+       │                       │              ┌─────────────────┐
+       │                       │              │ Underlying CLI  │
+       │                       │              │ (cursor-agent,   │
+       │                       │              │  etc.)          │
+       │                       │              └─────────────────┘
+       ▼
+  AgentInvoker(command, workspace, logger, logContext) → Promise<AgentResult>
+```
+
 ## Data flow
 
 1. **CLI** loads config (file + CLI overrides), validates `CURSOR_API_KEY` (unless `--dry-run`), then either prints the goals table (dry-run) or calls **daemon**.
-2. **Daemon** loads goals from `goals.md`, creates one **cursor-agent** invoker, then for each pending goal:
+2. **Daemon** loads goals from `goals.md`, creates one agent invoker via `createAgentInvoker(config.agent, config)`, then for each pending goal:
    - Builds path to `.planning/STATE.md`.
    - Creates **StateWatcher** (chokidar on STATE.md), registers progress listeners, starts it.
    - Calls **orchestrator** with the goal, config, logger, agent, and optional `onProgress`.
@@ -26,7 +53,7 @@ High-level module roles and data flow for contributors. For product overview and
 | **roadmap-parser.ts** | Parse ROADMAP.md, find phase dirs, discover PLAN.md files, get next unexecuted plan. |
 | **state-parser.ts** | Parse "## Current Position" in STATE.md → StateSnapshot (phase, plan, status, progressPercent). readStateMd(path) returns null on missing/parse failure. |
 | **state-watcher.ts** | Chokidar on STATE.md, debounce, readStateMd on change, emit typed progress events; start/stop, getLastSnapshot. |
-| **cursor-agent.ts** | createCursorAgentInvoker(config), validateCursorApiKey(); invoker spawns cursor-agent with NDJSON streaming, tree-kill on timeout/abort, session logging. |
+| **cursor-agent.ts** | createAgentInvoker(agentId, config), createCursorAgentInvoker(config), validateCursorApiKey(); invoker spawns cursor-agent with NDJSON streaming, tree-kill on timeout/abort, session logging. Stub adapters for claude-code, gemini-cli, codex (TODO). |
 | **stream-events.ts** | Parse NDJSON stream from cursor-agent, emit typed events; parseEvent returns null on bad lines. |
 | **logger.ts** | Pino init (level, pretty), createChildLogger for component names. |
 

@@ -9,6 +9,20 @@ import {
   type ResultEvent,
 } from './stream-events.js';
 
+/** Supported agent IDs for the pluggable invoker seam. */
+export type AgentId = 'cursor' | 'claude-code' | 'gemini-cli' | 'codex';
+
+export const SUPPORTED_AGENTS: readonly AgentId[] = [
+  'cursor',
+  'claude-code',
+  'gemini-cli',
+  'codex',
+] as const;
+
+export function isSupportedAgent(id: string): id is AgentId {
+  return (SUPPORTED_AGENTS as readonly string[]).includes(id);
+}
+
 export interface RunAgentOptions {
   agentPath: string;
   workspace: string;

@@ -1,13 +1,16 @@
+import path from 'node:path';
 import { writeFile, unlink } from 'node:fs/promises';
 import type { AgentInvoker, AgentResult } from './orchestrator.js';
 import type { Logger } from './logger.js';
 import { runAgent } from './agent-runner.js';
+import type { AgentId } from './agent-runner.js';
 import {
   appendSessionLog,
   type SessionLogEntry,
   type SessionLogContext,
 } from './session-log.js';
 import type { CursorStreamEvent } from './stream-events.js';
+import type { AutopilotConfig } from './config.js';
 
 export type { SessionLogContext };
 
@@ -168,5 +171,35 @@ export function validateCursorApiKey(): void {
       'CURSOR_API_KEY environment variable is not set or empty.\n' +
       'Set CURSOR_API_KEY environment variable. Generate from Cursor Dashboard → Cloud Agents → User API Keys.',
     );
+  }
+}
+
+/** Agent-agnostic factory: returns the appropriate invoker for the given agent ID. */
+export function createAgentInvoker(
+  agentId: AgentId,
+  config: AutopilotConfig,
+): AgentInvoker {
+  switch (agentId) {
+    case 'cursor':
+      return createCursorAgentInvoker({
+        agentPath: config.cursorAgentPath,
+        defaultTimeoutMs: config.agentTimeoutMs,
+        sessionLogPath: config.sessionLogPath,
+        heartbeatPath: path.join(config.workspaceRoot, '.planning', 'heartbeat.txt'),
+        heartbeatIntervalMs: 15_000,
+      });
+    case 'claude-code':
+    case 'gemini-cli':
+    case 'codex': {
+      // TODO: Implement real adapters when those agents support GSD NDJSON/heartbeat contract.
+      const stub: AgentInvoker = async (command, workspaceDir, logger, _logContext) => {
+        logger.info(
+          `Stub (${agentId}): would invoke agent with "${command.command} ${command.args ?? ''}" in ${workspaceDir}`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return { success: true, output: 'stub' };
+      };
+      return stub;
+    }
   }
 }
