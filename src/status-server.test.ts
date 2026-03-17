@@ -56,4 +56,32 @@ describe('status-server', () => {
     const res = await fetch(`http://127.0.0.1:${address.port}/other`);
     expect(res.status).toBe(404);
   });
+
+  it('serves GET /api/status with rich dashboard JSON when options provided', async () => {
+    const payload = { running: true, currentGoal: 'Goal', phaseNumber: 6, planNumber: 2 };
+    const { server, close: c } = createStatusServer(port, () => payload, {
+      stateMdPath: '/nonexistent/STATE.md',
+      sessionLogPath: '/nonexistent/session-log.jsonl',
+      workspaceRoot: process.cwd(),
+    });
+    close = c;
+    await new Promise<void>((resolve, reject) => {
+      server.once('listening', resolve);
+      server.once('error', reject);
+    });
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Expected port binding');
+    const res = await fetch(`http://127.0.0.1:${address.port}/api/status`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    const body = await res.json();
+    expect(body.running).toBe(true);
+    expect(body.currentGoal).toBe('Goal');
+    expect(body.phaseNumber).toBe(6);
+    expect(body.planNumber).toBe(2);
+    expect(body).toHaveProperty('tokens');
+    expect(body).toHaveProperty('cost');
+    expect(Array.isArray(body.sessionLogEntries)).toBe(true);
+    expect(Array.isArray(body.gitFeed)).toBe(true);
+  });
 });

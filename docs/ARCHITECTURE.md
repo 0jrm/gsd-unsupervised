@@ -78,7 +78,7 @@ The orchestrator drives GSD via an **AgentInvoker** function-type seam: it does 
 
 ## Status server and heartbeat
 
-- **Status server** — When `statusServerPort` is set (or `--status-server <port>`), the daemon starts a minimal HTTP server (node:http only). `GET /` and `GET /status` return JSON: `{ running, currentGoal?, phaseNumber?, planNumber?, heartbeat? }`. Suitable for phone/dashboard consumers.
+- **Status server** — When `statusServerPort` is set (or `--status-server <port>`), the daemon starts an Express-based HTTP server. Legacy endpoints: `GET /` and `GET /status` return JSON `{ running, currentGoal?, phaseNumber?, planNumber?, heartbeat? }` (unchanged for simple consumers). Dashboard endpoint: `GET /api/status` returns a richer JSON payload: same fields plus `currentAgentId`, `stateSnapshot` (from STATE.md), `sessionLogEntries` (rolling window), `gitFeed` (last N commits: hash, message, timestamp), and placeholder fields `tokens` and `cost` for future metrics. The server reads STATE.md, session-log.jsonl, and git (via simple-git) when building `/api/status`; dependencies are Express and simple-git.
 - **Heartbeat** — The invoker writes `.planning/heartbeat.txt` with an ISO timestamp every 15s while the agent runs and removes it on done/crashed/timeout. Missing or stale (>60s) heartbeat with a `running` session is treated as a crash for resume.
 
 ## GSD as black box
