@@ -49,10 +49,18 @@ export async function runDaemon(
   let currentGoal: string | null = null;
   let statusServerClose: (() => Promise<void>) | null = null;
   if (config.statusServerPort) {
-    const { close } = createStatusServer(config.statusServerPort, () => ({
-      running: !shuttingDown,
-      currentGoal: currentGoal ?? undefined,
-    }));
+    const { close } = createStatusServer(
+      config.statusServerPort,
+      () => ({
+        running: !shuttingDown,
+        currentGoal: currentGoal ?? undefined,
+      }),
+      {
+        stateMdPath,
+        sessionLogPath: config.sessionLogPath,
+        workspaceRoot: config.workspaceRoot,
+      },
+    );
     statusServerClose = close;
     logger.info({ port: config.statusServerPort }, 'Status server listening');
   }
