@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-03-16)
 
 **Core value:** The orchestrator loop must never stall, never lose state, and recover from crashes automatically — reliable hands-off goal-to-completion automation is the entire value proposition.
-**Current focus:** Phase 3 — Cursor Agent Integration (planned, ready for execution)
+**Current focus:** Phase 3 — Cursor Agent Integration (complete)
 
 ## Current Position
 
 Phase: 3 of 7 (Cursor Agent Integration)
-Plan: 0 of 3 in current phase
-Status: Planned — 3 plans created, ready to execute
-Last activity: 2026-03-16 — Phase 3 planned
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-03-16 — Completed 03-03-PLAN.md — Phase 3 complete
 
-Progress: █████░░░░░ 29%
+Progress: ██████░░░░ 43%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: ~3min
-- Total execution time: ~18min
+- Total plans completed: 9
+- Average duration: ~5min
+- Total execution time: ~30min
 
 **By Phase:**
 
@@ -29,9 +29,10 @@ Progress: █████░░░░░ 29%
 |-------|-------|-------|----------|
 | 1 - Foundation | 3/3 | ~9min | ~3min |
 | 2 - Orchestration | 3/3 | ~9min | ~3min |
+| 3 - Cursor Agent | 3/3 | ~12min | ~4min |
 
 **Recent Trend:**
-- Last 3 plans: 2min, 3min, 4min
+- Last 3 plans: 03-01 ~8min, 03-02 ~5min, 03-03 ~5min
 - Trend: Stable
 
 ## Accumulated Context
@@ -51,6 +52,11 @@ Recent decisions affecting current work:
 - AgentInvoker is a function type (simplest seam for Phase 3 swap)
 - Per-goal try/catch in daemon: one goal failing doesn't abort queue
 - Shutdown polling between every lifecycle step with progress context
+- Zod discriminatedUnion on 'type' for NDJSON event dispatch with passthrough for unknown fields
+- parseEvent returns null on any failure (no exceptions thrown)
+- tree-kill for process tree termination (cursor-agent may spawn subprocesses)
+- Non-interactive directive prepended to all GSD command prompts
+- CURSOR_API_KEY validated at startup (skipped in dry-run mode)
 
 ### Pending Todos
 
@@ -67,7 +73,7 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-16
-Stopped at: Completed 02-03-PLAN.md — Phase 2 complete
+Stopped at: Completed 03-03-PLAN.md — Phase 3 complete
 Resume file: None
 
 ## Architecture Decisions (Pre-Phase 1)
