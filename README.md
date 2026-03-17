@@ -50,9 +50,14 @@ export CURSOR_API_KEY=your_key_here
 | `--max-concurrent <n>` | `3` | Max concurrent goals when `--parallel` |
 | `--verbose` | `false` | Debug logging and pretty output |
 | `--dry-run` | `false` | Parse goals and show plan only; no agent calls |
+| `--agent <name>` | `cursor` | Agent type: `cursor`, `claude-code`, `gemini-cli`, `codex`. Invalid names fail fast. |
 | `--agent-path <path>` | `agent` | Path to cursor-agent binary |
 | `--agent-timeout <ms>` | `600000` | Agent invocation timeout (ms) |
 | `--status-server <port>` | — | Enable HTTP status server (GET / or /status returns JSON) |
+
+### Agent selection (`--agent`)
+
+The `--agent` flag selects which AI coding agent the orchestrator invokes. Supported values: `cursor` (default), `claude-code`, `gemini-cli`, `codex`. Invalid names fail fast at startup and do not start the daemon. Omitting the flag or using `--agent=cursor` yields identical behavior to the original Cursor-only implementation (backward compatible). Non-Cursor agents are currently stub placeholders (TODO).
 
 ### Goals file (`goals.md`)
 
@@ -84,6 +89,7 @@ Config can come from a JSON file (`--config`) and is overridden by CLI options. 
 | `verbose` | `false` | Verbose logging |
 | `logLevel` | `"info"` | `debug` \| `info` \| `warn` \| `error` |
 | `workspaceRoot` | `process.cwd()` | Project root (for `.planning/`, etc.) |
+| `agent` | `"cursor"` | Agent type: `cursor`, `claude-code`, `gemini-cli`, `codex` |
 | `cursorAgentPath` | `"cursor-agent"` | cursor-agent binary path |
 | `agentTimeoutMs` | `600000` | Agent timeout (≥ 10000) |
 | `sessionLogPath` | `"./session-log.jsonl"` | Session log file |

@@ -29,6 +29,7 @@ program
   .option('--max-concurrent <n>', 'Max concurrent projects when parallel', '3')
   .option('--verbose', 'Enable verbose/debug logging', false)
   .option('--dry-run', 'Parse goals and show plan without executing', false)
+  .option('--agent <name>', 'Agent type: cursor (default), claude-code, gemini-cli, codex', 'cursor')
   .option('--agent-path <path>', 'Path to cursor-agent binary', 'agent')
   .option('--agent-timeout <ms>', 'Agent invocation timeout in milliseconds', '600000')
   .option('--status-server <port>', 'Enable HTTP status server on port (GET / or /status)', undefined)
@@ -48,6 +49,7 @@ program
           parallel: opts.parallel as boolean,
           maxConcurrent: parseInt(opts.maxConcurrent as string, 10),
           verbose,
+          agent: opts.agent as string,
           cursorAgentPath: opts.agentPath as string,
           agentTimeoutMs: parseInt(opts.agentTimeout as string, 10),
           statusServerPort: opts.statusServer ? parseInt(opts.statusServer as string, 10) : undefined,
@@ -56,7 +58,7 @@ program
 
       log.debug({ config }, 'Configuration loaded');
 
-      if (!(opts.dryRun as boolean)) {
+      if (!(opts.dryRun as boolean) && config.agent === 'cursor') {
         try {
           validateCursorApiKey();
         } catch (err) {

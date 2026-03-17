@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { readFileSync, existsSync } from 'node:fs';
+import { SUPPORTED_AGENTS } from './agent-runner.js';
+
+export const AgentIdSchema = z.enum(SUPPORTED_AGENTS as unknown as [string, ...string[]]);
 
 export const AutopilotConfigSchema = z.object({
   goalsPath: z.string().default('./goals.md'),
@@ -8,6 +11,8 @@ export const AutopilotConfigSchema = z.object({
   verbose: z.boolean().default(false),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   workspaceRoot: z.string().default(process.cwd()),
+  /** Agent type: cursor (default), claude-code, gemini-cli, codex. Invalid values fail validation. */
+  agent: AgentIdSchema.default('cursor'),
   cursorAgentPath: z.string().default('cursor-agent'),
   agentTimeoutMs: z.number().int().min(10000).default(600000),
   sessionLogPath: z.string().default('./session-log.jsonl'),

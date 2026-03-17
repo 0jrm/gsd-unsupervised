@@ -5,7 +5,8 @@ import type { Logger } from './logger.js';
 import { createChildLogger } from './logger.js';
 import { loadGoals, getPendingGoals } from './goals.js';
 import { orchestrateGoal } from './orchestrator.js';
-import { createCursorAgentInvoker } from './cursor-agent.js';
+import type { AgentId } from './agent-runner.js';
+import { createAgentInvoker } from './cursor-agent.js';
 import { StateWatcher } from './state-watcher.js';
 import {
   computeResumePoint,
@@ -30,13 +31,7 @@ export async function runDaemon(
 
   logger.info({ count: pending.length }, `Found ${pending.length} pending goals`);
 
-  const agent = createCursorAgentInvoker({
-    agentPath: config.cursorAgentPath,
-    defaultTimeoutMs: config.agentTimeoutMs,
-    sessionLogPath: config.sessionLogPath,
-    heartbeatPath: path.join(config.workspaceRoot, '.planning', 'heartbeat.txt'),
-    heartbeatIntervalMs: 15_000,
-  });
+  const agent = createAgentInvoker(config.agent as AgentId, config);
 
   if (config.parallel) {
     logger.info(
