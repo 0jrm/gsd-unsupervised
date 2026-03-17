@@ -11,6 +11,7 @@ export const AutopilotConfigSchema = z.object({
   cursorAgentPath: z.string().default('cursor-agent'),
   agentTimeoutMs: z.number().int().min(10000).default(600000),
   sessionLogPath: z.string().default('./session-log.jsonl'),
+  stateWatchDebounceMs: z.number().int().min(100).default(500),
 });
 
 export type AutopilotConfig = z.infer<typeof AutopilotConfigSchema>;
