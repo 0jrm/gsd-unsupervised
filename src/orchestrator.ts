@@ -14,6 +14,8 @@ import {
   discoverPlans,
   getNextUnexecutedPlan,
 } from './roadmap-parser.js';
+import { readStateMd } from './state-parser.js';
+import type { StateSnapshot } from './state-parser.js';
 
 export interface AgentResult {
   success: boolean;
@@ -41,11 +43,26 @@ export async function orchestrateGoal(options: {
   logger: Logger;
   agent?: AgentInvoker;
   isShuttingDown: () => boolean;
+  onProgress?: (snapshot: StateSnapshot) => void;
 }): Promise<void> {
-  const { goal, config, isShuttingDown } = options;
+  const { goal, config, isShuttingDown, onProgress } = options;
   const logger = createChildLogger(options.logger, 'orchestrator');
   const agent = options.agent ?? stubAgent;
   const sm = new GoalStateMachine(goal.title);
+  const stateMdPath = path.join(config.workspaceRoot, '.planning', 'STATE.md');
+
+  async function reportProgress(expectedPhase: number): Promise<void> {
+    if (!onProgress) return;
+    const snapshot = await readStateMd(stateMdPath);
+    if (snapshot === null) return;
+    onProgress(snapshot);
+    if (snapshot.phaseNumber !== expectedPhase) {
+      logger.warn(
+        { expected: expectedPhase, reported: snapshot.phaseNumber },
+        `State mismatch: orchestrator expects phase ${expectedPhase}, STATE.md reports phase ${snapshot.phaseNumber}`,
+      );
+    }
+  }
 
   try {
     // new → initializing_project
@@ -61,6 +78,7 @@ export async function orchestrateGoal(options: {
       sm.fail(result.error ?? 'Agent failed');
       return;
     }
+    await reportProgress(1);
     sm.advance(GoalLifecyclePhase.InitializingProject);
 
     // initializing_project → creating_roadmap
@@ -76,6 +94,7 @@ export async function orchestrateGoal(options: {
       sm.fail(result.error ?? 'Agent failed');
       return;
     }
+    await reportProgress(1);
     sm.advance(GoalLifecyclePhase.CreatingRoadmap);
 
     // creating_roadmap → phase loop
@@ -111,6 +130,7 @@ export async function orchestrateGoal(options: {
         sm.fail(result.error ?? 'Agent failed');
         return;
       }
+      await reportProgress(phaseNum);
 
       const phasesRoot = path.join(config.workspaceRoot, '.planning', 'phases');
       const phaseDir = findPhaseDir(phasesRoot, phase.number);
@@ -168,6 +188,7 @@ export async function orchestrateGoal(options: {
           sm.fail(result.error ?? 'Agent failed');
           return;
         }
+        await reportProgress(phaseNum);
 
         sm.setPlanInfo(nextPlan.planNumber + 1, plans.length);
         plans = await discoverPlans(phaseDir);
