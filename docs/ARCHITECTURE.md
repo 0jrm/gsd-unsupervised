@@ -84,3 +84,17 @@ The orchestrator drives GSD via an **AgentInvoker** function-type seam: it does 
 ## GSD as black box
 
 The orchestrator drives GSD only via commands and file system: it writes no GSD internals, and reads only ROADMAP.md, STATE.md, and phase/plan files under `.planning/`. GSD rules live in `.cursor/rules/` and are not modified by this project.
+
+## STATE.md “Current Position” contract
+
+The daemon and dashboard treat `.planning/STATE.md` as the single source of truth for where a goal is in the GSD lifecycle. Only the `## Current Position` block is parsed; everything else is free-form.
+
+`state-parser.ts` expects the following exact line formats:
+
+- **Phase line**: `Phase: X of Y (Name)` — phase and total phase numbers plus the human-readable phase name in parentheses.
+- **Plan line**: `Plan: N of M in current phase` — current plan index and total plans for that phase.
+- **Status line**: `Status: <arbitrary status text>` — free-form, but `StateWatcher` treats any value containing “complete” (case-insensitive) as a completed phase.
+- **Last activity line** (optional but recommended): `Last activity: <ISO timestamp or human text>` — used for progress logs and resume context.
+- **Progress line** (optional): `Progress: [bar] NN%` — visual bar is ignored; only the trailing percentage is parsed into `progressPercent`.
+
+`readStateMd(path)` returns `null` when the file is missing or fails to match this format and never throws; callers must treat `null` as “no reliable state”. `StateWatcher` debounces filesystem events, calls `readStateMd`, emits `state_changed`/`phase_advanced`/`plan_advanced`/`phase_completed`/`goal_completed` based on snapshot diffs, and ignores missing/unparseable state (logs at debug/warn but does not emit progress events).
