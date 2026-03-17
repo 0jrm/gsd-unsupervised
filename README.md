@@ -27,6 +27,18 @@ npm install
 npm run build
 ```
 
+### WSL Bootstrap (one command)
+
+On WSL2, from the project root:
+
+```bash
+bash setup.sh              # Detect WSL2, sync GSD rules from Windows .cursor into repo
+bash setup.sh --dry-run     # Show what would be done (no changes)
+bash setup.sh --validate    # Bootstrap + validation checks + orchestrator smoke test
+```
+
+**Prerequisites:** WSL2, Cursor installed on Windows with GSD rules in `.cursor/rules`, and (for `--validate`) Node.js ≥18 and npm. A successful run creates or updates `.cursor/rules` in the repo and (with `--validate`) runs the test suite. Re-runs are idempotent.
+
 ## Usage
 
 ### Quick start
