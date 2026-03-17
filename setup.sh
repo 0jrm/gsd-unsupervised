@@ -7,18 +7,27 @@ set -euo pipefail
 log() { printf '%s\n' "$*"; }
 err() { printf '%s\n' "$*" >&2; }
 
-# --- Modes: --check-env (detection only), --check-cursor (path only), default = full bootstrap ---
+REPO_ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# --- Modes: --dry-run/--check (no changes), --validate (bootstrap + checks + smoke), default = bootstrap ---
 MODE="bootstrap"
-for arg in "$@"; do
-  case "$arg" in
-    --check-env)   MODE="check-env"; break ;;
-    --check-cursor) MODE="check-cursor"; break ;;
+SMOKE_TEST=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run|--check) MODE="dry-run"; shift ;;
+    --validate)        MODE="validate"; shift ;;
+    --smoke-test)      SMOKE_TEST="1"; shift ;;
     -h|--help)
-      log "Usage: $0 [--check-env | --check-cursor]"
-      log "  --check-env    Print WSL2/env detection only (no changes)."
-      log "  --check-cursor Print Windows .cursor path only (no copy)."
-      log "  (no args)      Full bootstrap: detect, resolve, sync GSD rules."
+      log "Usage: $0 [--dry-run | --check | --validate] [--smoke-test]"
+      log "  --dry-run, --check  Print detection and planned actions only (no copy)."
+      log "  --validate         Bootstrap then run post-condition checks and optional smoke test."
+      log "  --smoke-test       With --validate, run orchestrator smoke test (node/npm + install + test)."
+      log "  (no args)          Full bootstrap: detect, resolve, sync GSD rules."
       exit 0
+      ;;
+    *)
+      err "Usage: $0 [--dry-run | --check | --validate] [--smoke-test]"
+      exit 1
       ;;
   esac
 done
@@ -120,6 +129,42 @@ run_check_cursor() {
   return 0
 }
 
+# --- Dry-run: detection + print planned actions, no filesystem changes ---
+run_dry_run() {
+  log "=== Dry run (no changes) ==="
+  if ! detect_wsl; then exit 1; fi
+  log "WSL: WSL2 detected."
+  if ! check_mnt_c; then exit 1; fi
+  log "/mnt/c: present and readable."
+  if ! resolve_cursor_path; then exit 1; fi
+  log "Would sync: $RULES_SRC -> $REPO_ROOT/.cursor/rules"
+  log "No files modified."
+  return 0
+}
+
+# --- Post-condition checks (after bootstrap) ---
+run_validation_checks() {
+  local failed=()
+  if ! detect_wsl &>/dev/null; then
+    failed+=("WSL2 detection")
+  fi
+  if ! check_mnt_c &>/dev/null; then
+    failed+=("Windows /mnt/c not available")
+  fi
+  if [[ ! -d "$REPO_ROOT/.cursor/rules" ]]; then
+    failed+=("missing .cursor/rules")
+  fi
+  if [[ ! -f "$REPO_ROOT/package.json" ]]; then
+    failed+=("project root missing package.json")
+  fi
+  if [[ -n "${failed[*]:-}" ]]; then
+    err "Validation failed: ${failed[*]}"
+    return 1
+  fi
+  log "Validation passed: .cursor/rules present, WSL2 OK, project root healthy."
+  return 0
+}
+
 # --- Task 3: Copy or sync GSD rules into the workspace safely ---
 sync_rules() {
   local dest_dir
@@ -140,22 +185,70 @@ sync_rules() {
   return 0
 }
 
+# --- Smoke test: node/npm, install if needed, minimal test (Task 2) ---
+run_smoke_test() {
+  if ! command -v node &>/dev/null; then
+    err "Smoke test failed: node not found. Install Node.js (>=18)."
+    return 1
+  fi
+  if ! command -v npm &>/dev/null; then
+    err "Smoke test failed: npm not found. Install npm or use pnpm."
+    return 1
+  fi
+  log "Node: $(node --version). npm: $(npm --version)."
+  if [[ ! -d "$REPO_ROOT/node_modules" ]]; then
+    log "Installing dependencies..."
+    (cd "$REPO_ROOT" && npm install) || { err "npm install failed."; return 1; }
+  fi
+  local smoke_cmd=""
+  if [[ -f "$REPO_ROOT/package.json" ]]; then
+    if grep -qE '"\s*smoke\s*"' "$REPO_ROOT/package.json" 2>/dev/null; then
+      smoke_cmd="npm run smoke"
+    elif grep -qE '"\s*test\s*"' "$REPO_ROOT/package.json" 2>/dev/null; then
+      smoke_cmd="npm test"
+    elif grep -qE '"\s*lint\s*"' "$REPO_ROOT/package.json" 2>/dev/null; then
+      smoke_cmd="npm run lint"
+    fi
+  fi
+  if [[ -z "$smoke_cmd" ]]; then
+    log "No smoke/test/lint script in package.json; skipping orchestrator smoke."
+    return 0
+  fi
+  log "Running orchestrator smoke: $smoke_cmd"
+  (cd "$REPO_ROOT" && eval "$smoke_cmd") || { err "Smoke test failed ($smoke_cmd)."; return 1; }
+  log "Smoke test passed."
+  return 0
+}
+
+# --- Validate: full bootstrap + post-condition checks + smoke test ---
+run_validate() {
+  if ! detect_wsl || ! check_mnt_c; then exit 1; fi
+  if ! resolve_cursor_path; then exit 1; fi
+  sync_rules "$REPO_ROOT/.cursor/rules"
+  if ! run_validation_checks; then exit 1; fi
+  log "Bootstrap and validation passed. Running orchestrator smoke test..."
+  if ! run_smoke_test; then
+    err "Bootstrap and validation succeeded, but smoke test failed. Check Node/npm and project tests."
+    return 1
+  fi
+  return 0
+}
+
 # --- Main ---
 case "$MODE" in
-  check-env)
-    run_check_env
+  dry-run)
+    run_dry_run
     exit 0
     ;;
-  check-cursor)
-    run_check_cursor
+  validate)
+    run_validate
     exit 0
     ;;
   bootstrap)
     if ! detect_wsl || ! check_mnt_c; then exit 1; fi
     if ! resolve_cursor_path; then exit 1; fi
-    REPO_ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     sync_rules "$REPO_ROOT/.cursor/rules"
-    log "Bootstrap complete. Run with --check-env or --check-cursor to verify."
+    log "Bootstrap complete. Run 'bash setup.sh --validate' to verify and optionally run smoke tests."
     exit 0
     ;;
   *)
