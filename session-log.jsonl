@@ -1,0 +1,18 @@
+{"timestamp":"2026-03-17T00:44:07.891Z","goalTitle":"","phase":"/gsd/new-project","sessionId":null,"command":"/gsd/new-project","status":"running"}
+{"timestamp":"2026-03-17T00:44:07.891Z","goalTitle":"","phase":"/gsd/new-project","sessionId":"115f3efa-a697-446d-a749-858f741a4cf1","command":"/gsd/new-project","status":"done","durationMs":63607}
+{"timestamp":"2026-03-17T00:45:11.505Z","goalTitle":"","phase":"/gsd/create-roadmap","sessionId":null,"command":"/gsd/create-roadmap","status":"running"}
+{"timestamp":"2026-03-17T00:45:11.505Z","goalTitle":"","phase":"/gsd/create-roadmap","sessionId":"3946a138-cf1b-4233-9f82-beac130cf436","command":"/gsd/create-roadmap","status":"done","durationMs":33542}
+{"timestamp":"2026-03-17T00:45:45.059Z","goalTitle":"","phase":"/gsd/plan-phase","sessionId":null,"command":"/gsd/plan-phase 1","status":"running"}
+{"timestamp":"2026-03-17T00:45:45.059Z","goalTitle":"","phase":"/gsd/plan-phase","sessionId":"f55ea5fa-7ed0-43b1-a493-24f64a9a00db","command":"/gsd/plan-phase 1","status":"done","durationMs":255633}
+{"timestamp":"2026-03-17T00:50:00.705Z","goalTitle":"","phase":"/gsd/plan-phase","sessionId":null,"command":"/gsd/plan-phase 2","status":"running"}
+{"timestamp":"2026-03-17T01:15:08.912Z","goalTitle":"","phase":"/gsd/new-project","sessionId":null,"command":"/gsd/new-project","status":"running"}
+{"timestamp":"2026-03-17T01:15:08.912Z","goalTitle":"","phase":"/gsd/new-project","sessionId":"cbe63aac-6340-4037-8117-8e47fdc10a3c","command":"/gsd/new-project","status":"done","durationMs":40700}
+{"timestamp":"2026-03-17T01:15:49.620Z","goalTitle":"","phase":"/gsd/create-roadmap","sessionId":null,"command":"/gsd/create-roadmap","status":"running"}
+{"timestamp":"2026-03-17T01:15:49.620Z","goalTitle":"","phase":"/gsd/create-roadmap","sessionId":"7ae3b8b1-8184-43e8-91e8-db64b54e8e2f","command":"/gsd/create-roadmap","status":"crashed","durationMs":114543,"error":"Agent failed (exit 130): \nAborting operation...\n"}
+{"timestamp":"2026-03-17T01:25:31.903Z","goalTitle":"","phase":"/gsd/new-project","sessionId":null,"command":"/gsd/new-project","status":"running"}
+{"timestamp":"2026-03-17T01:25:31.903Z","goalTitle":"","phase":"/gsd/new-project","sessionId":"d358b955-4e4d-404b-bb96-5e5b7ddf8aec","command":"/gsd/new-project","status":"done","durationMs":35157}
+{"timestamp":"2026-03-17T01:26:07.074Z","goalTitle":"","phase":"/gsd/create-roadmap","sessionId":null,"command":"/gsd/create-roadmap","status":"running"}
+{"timestamp":"2026-03-17T01:26:07.074Z","goalTitle":"","phase":"/gsd/create-roadmap","sessionId":"943ccb4e-4df9-4ba0-bf22-46aed2140741","command":"/gsd/create-roadmap","status":"crashed","durationMs":26174,"error":"Agent failed (exit 130): \nAborting operation...\n"}
+{"timestamp":"2026-03-17T01:33:24.989Z","goalTitle":"","phase":"/gsd/new-project","sessionId":null,"command":"/gsd/new-project","status":"running"}
+{"timestamp":"2026-03-17T01:33:24.989Z","goalTitle":"","phase":"/gsd/new-project","sessionId":"80a1991d-4490-4608-86ba-2da3dbc5d984","command":"/gsd/new-project","status":"done","durationMs":23507}
+{"timestamp":"2026-03-17T01:33:48.512Z","goalTitle":"","phase":"/gsd/create-roadmap","sessionId":null,"command":"/gsd/create-roadmap","status":"running"}

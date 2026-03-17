@@ -1,21 +1,6 @@
 {
   "permissions": {
-    "allow": [
-      "Shell(npm)", "Shell(node)", "Shell(npx)",
-      "Shell(git add)", "Shell(git commit)", "Shell(git checkout)",
-      "Shell(git log)", "Shell(git status)", "Shell(git diff)",
-      "Shell(ls)", "Shell(cat)", "Shell(echo)", "Shell(mkdir)",
-      "Shell(cp)", "Shell(find)", "Shell(grep)", "Shell(sed)",
-      "Shell(curl)", "Shell(bash)", "Shell(sh)", "Shell(date)",
-      "Shell(head)", "Shell(tail)", "Shell(wc)", "Shell(rg)",
-      "Read(**)", "Write(**)"
-    ],
-    "deny": [
-      "Shell(rm)",
-      "Shell(git reset)",
-      "Shell(git push --force)",
-      "Shell(git clean)",
-      "Shell(sudo)"
-    ]
+    "allow": ["Shell(*)", "Read(**)", "Write(**)"],
+    "deny": ["Shell(sudo)"]
   }
 }
