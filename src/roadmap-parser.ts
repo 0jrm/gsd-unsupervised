@@ -118,3 +118,13 @@ export function getNextUnexecutedPlan(plans: PlanInfo[]): PlanInfo | null {
 export function isPhaseComplete(plans: PlanInfo[]): boolean {
   return plans.length > 0 && plans.every((p) => p.executed);
 }
+
+/**
+ * Returns true iff the plan's SUMMARY file exists (auditable plan completion).
+ * Same heuristic as discoverPlans: plan N-M-PLAN.md → N-M-SUMMARY.md.
+ */
+export function isPlanCompleted(phaseDir: string, planNumber: number): boolean {
+  const plans = readdirSync(phaseDir);
+  const suffix = `-${planNumber}-SUMMARY.md`;
+  return plans.some((name) => name.endsWith(suffix) && existsSync(join(phaseDir, name)));
+}
