@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-03-16)
 
 **Core value:** The orchestrator loop must never stall, never lose state, and recover from crashes automatically — reliable hands-off goal-to-completion automation is the entire value proposition.
-**Current focus:** Phase 2 — Core Orchestration Loop (complete)
+**Current focus:** Phase 3 — Cursor Agent Integration (planned, ready for execution)
 
 ## Current Position
 
-Phase: 2 of 7 (Core Orchestration Loop)
-Plan: 3 of 3 in current phase
-Status: Phase complete
-Last activity: 2026-03-16 — Completed 02-03-PLAN.md
+Phase: 3 of 7 (Cursor Agent Integration)
+Plan: 0 of 3 in current phase
+Status: Planned — 3 plans created, ready to execute
+Last activity: 2026-03-16 — Phase 3 planned
 
 Progress: █████░░░░░ 29%
 

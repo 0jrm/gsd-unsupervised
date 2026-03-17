@@ -41,7 +41,7 @@ None
 **Depends on**: Phase 2
 **Research**: Likely (external tool integration, critical behavioral unknown)
 **Research topics**: cursor-agent CLI interface and headless invocation flags; command piping and output streaming format; **how cursor-agent handles interactive prompts mid-execution** — does it hang, timeout, buffer, or can it be driven non-interactively? This is the #1 unknown that could break the orchestrator design.
-**Plans**: TBD
+**Plans**: 0/3 complete
 
 ### Phase 4: State Monitoring & Phase Transitions
 **Goal**: Chokidar-based file watcher on .planning/STATE.md that detects progress changes and triggers automatic phase advancement in the orchestrator
@@ -76,7 +76,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 |-------|---------------|--------|-----------|
 | 1. Foundation & CLI Scaffold | 3/3 | Complete | 2026-03-16 |
 | 2. Core Orchestration Loop | 3/3 | Complete | 2026-03-16 |
-| 3. Cursor Agent Integration | 0/TBD | Not started | - |
+| 3. Cursor Agent Integration | 0/3 | Planned | - |
 | 4. State Monitoring & Phase Transitions | 0/TBD | Not started | - |
 | 5. Crash Detection & Recovery | 0/TBD | Not started | - |
 | 6. Web Dashboard | 0/TBD | Not started | - |
