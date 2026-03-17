@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { readFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
 import { SUPPORTED_AGENTS } from './agent-runner.js';
 
 export const AgentIdSchema = z.enum(SUPPORTED_AGENTS as unknown as [string, ...string[]]);
@@ -39,7 +40,20 @@ export function loadConfig(options: {
     fileValues = JSON.parse(raw);
   }
 
-  const merged = { ...fileValues, ...stripUndefined(cliOverrides ?? {}) };
+  const workspaceRoot =
+    (cliOverrides?.workspaceRoot as string | undefined) ??
+    (fileValues.workspaceRoot as string | undefined) ??
+    process.cwd();
+
+  // `.planning/config.json` is primarily for GSD framework behavior, but we also
+  // allow it to override a small set of daemon runtime flags (e.g. autoCheckpoint).
+  const planningOverrides = readPlanningOverrides(workspaceRoot);
+
+  const merged = {
+    ...fileValues,
+    ...planningOverrides,
+    ...stripUndefined(cliOverrides ?? {}),
+  };
 
   const result = AutopilotConfigSchema.safeParse(merged);
   if (!result.success) {
@@ -56,4 +70,21 @@ function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(obj).filter(([, v]) => v !== undefined),
   );
+}
+
+function readPlanningOverrides(workspaceRoot: string): Partial<AutopilotConfig> {
+  try {
+    const planningPath = path.join(workspaceRoot, '.planning', 'config.json');
+    if (!existsSync(planningPath)) return {};
+    const raw = readFileSync(planningPath, 'utf-8');
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+    const overrides: Partial<AutopilotConfig> = {};
+    if (typeof parsed.autoCheckpoint === 'boolean') {
+      overrides.autoCheckpoint = parsed.autoCheckpoint;
+    }
+    return overrides;
+  } catch {
+    return {};
+  }
 }

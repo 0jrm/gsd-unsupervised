@@ -123,7 +123,13 @@ export async function orchestrateGoal(options: {
   /** Before execute-plan: ensure clean git or create checkpoint when config allows. */
   async function ensureCleanGitOrCheckpoint(): Promise<void> {
     if (!config.requireCleanGitBeforePlan) return;
-    const clean = await isWorkingTreeClean(config.workspaceRoot);
+    const clean = await isWorkingTreeClean(config.workspaceRoot, {
+      ignorePaths: [
+        '.planning/STATE.md',
+        '.planning/heartbeat.txt',
+        'session-log.jsonl',
+      ],
+    });
     if (clean) return;
     if (config.autoCheckpoint) {
       logger.info('Working tree dirty — creating checkpoint commit');

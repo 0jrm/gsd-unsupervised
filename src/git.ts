@@ -15,16 +15,51 @@ export interface CommitEntry {
  * Returns true if git working tree has no uncommitted changes (clean).
  * Runs `git status --porcelain` in workspaceRoot; empty output = clean.
  */
-export async function isWorkingTreeClean(workspaceRoot: string): Promise<boolean> {
+export async function isWorkingTreeClean(
+  workspaceRoot: string,
+  options?: { ignorePaths?: string[] },
+): Promise<boolean> {
   try {
     const { stdout } = await execFileP('git', ['status', '--porcelain'], {
       cwd: workspaceRoot,
       encoding: 'utf-8',
     });
-    return stdout.trim().length === 0;
+    const ignore = new Set((options?.ignorePaths ?? []).map(normalizeGitPath));
+    const entries = stdout
+      .split('\n')
+      .map((l) => l.trimEnd())
+      .filter((l) => l.trim().length > 0);
+
+    if (entries.length === 0) return true;
+
+    for (const line of entries) {
+      const paths = extractPorcelainPaths(line).map(normalizeGitPath);
+      const allIgnored = paths.length > 0 && paths.every((p) => ignore.has(p));
+      if (!allIgnored) return false;
+    }
+    return true;
   } catch {
     return false;
   }
+}
+
+function normalizeGitPath(p: string): string {
+  // git always reports paths with forward slashes; normalize just in case.
+  return p.replace(/\\/g, '/');
+}
+
+/**
+ * Extracts one or two paths from a `git status --porcelain` line.
+ * Handles normal entries: " M path", "?? path", and renames: "R  old -> new".
+ */
+function extractPorcelainPaths(line: string): string[] {
+  // Porcelain v1: first 2 chars are status, then a space, then path(s).
+  const rest = line.length >= 4 ? line.slice(3).trim() : line.trim();
+  if (rest.includes('->')) {
+    const [from, to] = rest.split('->').map((s) => s.trim());
+    return [from, to].filter(Boolean);
+  }
+  return rest ? [rest] : [];
 }
 
 /**
