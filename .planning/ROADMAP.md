@@ -18,7 +18,7 @@ None
 - [x] **Phase 2: Core Orchestration Loop** — Sequential goal processing, GSD command sequencing, lifecycle state machine
 - [x] **Phase 3: Cursor Agent Integration** — Spawn cursor-agent headlessly, pipe GSD commands, capture output, handle process lifecycle
 - [x] **Phase 4: State Monitoring & Phase Transitions** — File watching on STATE.md, progress detection, automatic phase advancement
-- [ ] **Phase 5: Crash Detection & Recovery** — Process health monitoring, dead agent detection, resume from exact failure point
+- [x] **Phase 5: Crash Detection & Recovery** — Process health monitoring, dead agent detection, resume from exact failure point
 - [ ] **Phase 6: Web Dashboard** — Express server, plain HTML/CSS/JS dashboard with live status, progress bars, git feed, token tracking
 - [ ] **Phase 7: WSL Bootstrap & Setup** — setup.sh script, WSL detection, path resolution, GSD rules copy, install validation
 
@@ -90,6 +90,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Core Orchestration Loop | 3/3 | Complete | 2026-03-16 |
 | 3. Cursor Agent Integration | 3/3 | Complete | 2026-03-16 |
 | 4. State Monitoring & Phase Transitions | 3/3 | Complete | 2026-03-16 |
-| 5. Crash Detection & Recovery | 0/4 | Not started | - |
+| 5. Crash Detection & Recovery | 4/4 | Complete | 2026-03-17 |
 | 6. Web Dashboard | 0/TBD | Not started | - |
 | 7. WSL Bootstrap & Setup | 0/TBD | Not started | - |
