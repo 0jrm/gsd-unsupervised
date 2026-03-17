@@ -22,5 +22,6 @@
   "safety": {
     "always_confirm_destructive": false,
     "always_confirm_external_services": false
-  }
+  },
+  "autoCheckpoint": true
 }
