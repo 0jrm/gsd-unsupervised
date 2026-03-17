@@ -23,8 +23,8 @@ vi.mock('./agent-runner.js', async () => {
   };
 });
 
-const writeFileMock = vi.fn<unknown[], Promise<void>>();
-const unlinkMock = vi.fn<unknown[], Promise<void>>();
+const writeFileMock = vi.fn() as unknown as vi.Mock<Promise<void>, unknown[]>;
+const unlinkMock = vi.fn() as unknown as vi.Mock<Promise<void>, unknown[]>;
 
 vi.mock('node:fs/promises', async () => {
   const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises');

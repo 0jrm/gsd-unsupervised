@@ -7,6 +7,7 @@ const baseConfig: AutopilotConfig = {
   goalsPath: './goals.md',
   parallel: false,
   maxConcurrent: 3,
+  maxCpuFraction: 0.75,
   verbose: false,
   logLevel: 'info',
   workspaceRoot: '/tmp/test',

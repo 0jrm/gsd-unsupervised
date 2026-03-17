@@ -16,11 +16,11 @@ function createMockChildProcess(): ChildProcess & EventEmitter {
   return child;
 }
 
-const spawnMock = vi.fn<Parameters<SpawnFn>, ReturnType<SpawnFn>>();
-const treeKillMock = vi.fn<
-  Parameters<typeof treeKillType>,
-  ReturnType<typeof treeKillType>
->();
+const spawnMock = vi.fn() as unknown as vi.Mock<ReturnType<SpawnFn>, Parameters<SpawnFn>>;
+const treeKillMock = vi.fn() as unknown as vi.Mock<
+  ReturnType<typeof treeKillType>,
+  Parameters<typeof treeKillType>
+>;
 
 vi.mock('node:child_process', async () => {
   const actual = await vi.importActual<typeof import('node:child_process')>(

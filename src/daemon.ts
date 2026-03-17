@@ -4,7 +4,7 @@ import { stat, writeFile } from 'node:fs/promises';
 import type { AutopilotConfig } from './config.js';
 import type { Logger } from './logger.js';
 import { createChildLogger } from './logger.js';
-import { loadGoals, getPendingGoals } from './goals.js';
+import { loadGoals, getPendingGoals, buildExecutionPlan } from './goals.js';
 import { orchestrateGoal } from './orchestrator.js';
 import type { AgentId } from './agent-runner.js';
 import { createAgentInvoker } from './cursor-agent.js';
@@ -79,6 +79,8 @@ export async function runDaemon(
     logger.info({ port: config.statusServerPort }, 'Status server listening');
   }
 
+  const plan = buildExecutionPlan(pending);
+
   let resumeFrom: Awaited<ReturnType<typeof computeResumePoint>> = null;
   if (pending.length > 0) {
     const crashed = await inspectForCrashedSessions(config.sessionLogPath);
@@ -118,8 +120,8 @@ export async function runDaemon(
 
   const pauseFlagPath = path.join(config.workspaceRoot, '.pause-autopilot');
 
-  for (let i = 0; i < pending.length; i++) {
-    const goal = pending[i];
+  for (let i = 0; i < plan.ordered.length; i++) {
+    const goal = plan.ordered[i];
     currentGoal = goal.title;
     let plannedUpToPhaseNum = 0;
 

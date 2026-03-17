@@ -4,6 +4,7 @@ import express, { type Request, type Response } from 'express';
 import { readStateMd } from './state-parser.js';
 import { readSessionLog } from './session-log.js';
 import { getRecentCommits } from './git.js';
+import { currentLoadInfo } from './resource-governor.js';
 
 /** Schema for .planning/config.json parallelization slice (exposed via /api/config). */
 export interface PlanningConfig {
@@ -66,6 +67,8 @@ export interface DashboardStatusPayload {
   tokens?: { prompt?: number; completion?: number; total?: number };
   /** Placeholder for cost tracking (populated later). */
   cost?: { amount?: number; currency?: string };
+  /** Current system load information (best-effort). */
+  systemLoad?: import('./resource-governor.js').LoadInfo & { maxCpuFraction?: number };
 }
 
 export interface StatusServerOptions {
@@ -334,6 +337,7 @@ export function createStatusServer(
       ...legacy,
       tokens: {},
       cost: {},
+      systemLoad: currentLoadInfo(),
     };
 
     if (options) {

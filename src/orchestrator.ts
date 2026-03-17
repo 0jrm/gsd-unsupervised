@@ -24,6 +24,7 @@ import { readStateMd } from './state-parser.js';
 import type { StateSnapshot } from './state-parser.js';
 import type { ResumeFrom } from './session-log.js';
 import { sendSms } from './notifier.js';
+import { waitForHeadroom } from './resource-governor.js';
 
 const execFileP = promisify(execFile);
 
@@ -146,6 +147,13 @@ export async function orchestrateGoal(options: {
     );
   }
 
+  async function waitForCpuHeadroom(): Promise<void> {
+    await waitForHeadroom({
+      maxCpuFraction: config.maxCpuFraction,
+      logger,
+    });
+  }
+
   async function reportProgress(options: { expectedPhase: number; expectedSummaryPath?: string }): Promise<void> {
     if (!onProgress) return;
     const snapshot = await readStateMd(stateMdPath);
@@ -230,6 +238,7 @@ export async function orchestrateGoal(options: {
         return;
       }
       await ensureCleanGitOrCheckpoint();
+      await waitForCpuHeadroom();
       sm.advance(GoalLifecyclePhase.ExecutingPlan);
       const execCmd: GsdCommand = {
         command: '/gsd/execute-plan',
@@ -277,6 +286,7 @@ export async function orchestrateGoal(options: {
           return;
         }
         await ensureCleanGitOrCheckpoint();
+        await waitForCpuHeadroom();
         sm.advance(GoalLifecyclePhase.ExecutingPlan);
         const cmd: GsdCommand = {
           command: '/gsd/execute-plan',
@@ -373,6 +383,7 @@ export async function orchestrateGoal(options: {
             return;
           }
           await ensureCleanGitOrCheckpoint();
+          await waitForCpuHeadroom();
           sm.advance(GoalLifecyclePhase.ExecutingPlan);
           const exec: GsdCommand = {
             command: '/gsd/execute-plan',
@@ -626,6 +637,7 @@ export async function orchestrateGoal(options: {
           return;
         }
         await ensureCleanGitOrCheckpoint();
+        await waitForCpuHeadroom();
         sm.advance(GoalLifecyclePhase.ExecutingPlan);
 
         const execCmd: GsdCommand = {

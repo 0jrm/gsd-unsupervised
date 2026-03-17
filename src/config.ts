@@ -9,6 +9,11 @@ export const AutopilotConfigSchema = z.object({
   goalsPath: z.string().default('./goals.md'),
   parallel: z.boolean().default(false),
   maxConcurrent: z.number().int().min(1).max(10).default(3),
+  /**
+   * Upper bound on allowed CPU usage before new agent work waits.
+   * Expressed as a fraction of total CPU capacity (1.0 = 100% of all cores).
+   */
+  maxCpuFraction: z.number().min(0.1).max(1).default(0.75),
   verbose: z.boolean().default(false),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   workspaceRoot: z.string().default(process.cwd()),
@@ -82,6 +87,12 @@ function readPlanningOverrides(workspaceRoot: string): Partial<AutopilotConfig> 
     const overrides: Partial<AutopilotConfig> = {};
     if (typeof parsed.autoCheckpoint === 'boolean') {
       overrides.autoCheckpoint = parsed.autoCheckpoint;
+    }
+    if (typeof parsed.maxConcurrent === 'number') {
+      overrides.maxConcurrent = parsed.maxConcurrent;
+    }
+    if (typeof parsed.maxCpuFraction === 'number') {
+      overrides.maxCpuFraction = parsed.maxCpuFraction;
     }
     return overrides;
   } catch {
