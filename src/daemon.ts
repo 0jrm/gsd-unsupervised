@@ -10,10 +10,10 @@ import type { AgentId } from './agent-runner.js';
 import { createAgentInvoker } from './cursor-agent.js';
 import { StateWatcher } from './state-watcher.js';
 import {
-  computeResumePoint,
   inspectForCrashedSessions,
   appendSessionLog,
 } from './session-log.js';
+import { computeResumePointer } from './resume-pointer.js';
 import { createStatusServer, readPlanningConfig } from './status-server.js';
 import { sendSms } from './notifier.js';
 
@@ -81,7 +81,7 @@ export async function runDaemon(
 
   const plan = buildExecutionPlan(pending);
 
-  let resumeFrom: Awaited<ReturnType<typeof computeResumePoint>> = null;
+  let resumeFrom: Awaited<ReturnType<typeof computeResumePointer>> = null;
   if (pending.length > 0) {
     const crashed = await inspectForCrashedSessions(config.sessionLogPath);
     if (crashed?.status === 'running') {
@@ -105,15 +105,17 @@ export async function runDaemon(
         });
       }
     }
-    resumeFrom = await computeResumePoint(
-      config.sessionLogPath,
-      config.workspaceRoot,
-      pending[0].title ?? '',
-    );
+    resumeFrom = await computeResumePointer({
+      sessionLogPath: config.sessionLogPath,
+      stateMdPath,
+      goalTitle: pending[0].title ?? '',
+    });
     if (resumeFrom) {
       logger.info(
         { phaseNumber: resumeFrom.phaseNumber, planNumber: resumeFrom.planNumber },
-        'Resume point detected — will resume first goal from phase/plan',
+        'Resuming from phase %s plan %s due to previous crash',
+        resumeFrom.phaseNumber,
+        resumeFrom.planNumber === 0 ? '1 (first)' : resumeFrom.planNumber,
       );
     }
   }
