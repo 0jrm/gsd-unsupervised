@@ -36,6 +36,7 @@ program
   .option('--agent-path <path>', 'Path to cursor-agent binary', 'agent')
   .option('--agent-timeout <ms>', 'Agent invocation timeout in milliseconds', '600000')
   .option('--status-server <port>', 'Enable HTTP status server on port (GET / or /status)', undefined)
+  .option('--ngrok', 'Start ngrok tunnel to status server port (use with --status-server)', false)
   .action(async (opts) => {
     const verbose = opts.verbose as boolean;
     const logger = initLogger({
@@ -56,6 +57,7 @@ program
           cursorAgentPath: opts.agentPath as string,
           agentTimeoutMs: parseInt(opts.agentTimeout as string, 10),
           statusServerPort: opts.statusServer ? parseInt(opts.statusServer as string, 10) : undefined,
+          ngrok: opts.ngrok as boolean,
         },
       });
 

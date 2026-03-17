@@ -10,7 +10,8 @@ Autonomous orchestrator that drives Cursor's headless agent through the full [GS
 - **State monitoring** — Watches `.planning/STATE.md` for phase/plan progress and emits events (phase_advanced, plan_advanced, phase_completed, goal_completed).
 - **Crash detection & recovery** — Session log at project root, resume from exact phase/plan on next run, heartbeat for liveness.
 - **Resource governor** — CPU + memory headroom checks before each agent call so the daemon backs off instead of thrashing your box.
-- **Web dashboard** — Optional status server with HTML dashboard and `/api/status` JSON.
+- **Local status dashboard** — Optional HTTP server (`--status-server <port>`) serving an HTML dashboard and `/api/status` JSON. Use `--ngrok` to have the daemon run `ngrok http <port>` so the dashboard is reachable via a public URL while the process runs.
+- **Optional SMS (Twilio)** — Notifications for goal complete, goal failed, and daemon paused; requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `TWILIO_TO`. If unset, the daemon runs without SMS.
 
 ## Prerequisites
 
@@ -55,15 +56,31 @@ bash setup.sh --validate    # Bootstrap + validation checks + orchestrator smoke
 
 ## Usage
 
-### Quick start
+### Recommended (dashboard + public URL)
+
+Run the daemon with the status server and ngrok so you get a local dashboard and a public URL (ngrok prints it to the terminal):
+
+```bash
+export CURSOR_API_KEY=your_key_here
+./bin/gsd-unsupervised --goals goals.md --status-server 4173 --ngrok --verbose
+```
+
+- **Status server** on port `4173`: open `http://localhost:4173` for the HTML dashboard.
+- **ngrok** runs `ngrok http 4173` for the same process; the public URL appears in the terminal. When the daemon exits, ngrok is stopped.
+
+Requires [ngrok](https://ngrok.com/) on your PATH and an ngrok authtoken (e.g. `ngrok config add-authtoken <token>`).
+
+### Other ways to run
 
 ```bash
 # Preview the goal queue (no API key needed)
 ./bin/gsd-unsupervised --dry-run --goals goals.md
 
-# Run the daemon (requires CURSOR_API_KEY)
-export CURSOR_API_KEY=your_key_here
+# Run without dashboard
 ./bin/gsd-unsupervised --goals goals.md --verbose
+
+# Dashboard only (no ngrok, localhost only)
+./bin/gsd-unsupervised --goals goals.md --status-server 4173 --verbose
 ```
 
 ### CLI options
@@ -79,7 +96,8 @@ export CURSOR_API_KEY=your_key_here
 | `--agent <name>` | `cursor` | Agent type: `cursor`, `claude-code`, `gemini-cli`, `codex`. Invalid names fail fast. |
 | `--agent-path <path>` | `agent` | Path to cursor-agent binary |
 | `--agent-timeout <ms>` | `600000` | Agent invocation timeout (ms) |
-| `--status-server <port>` | — | Enable HTTP status server (GET / or /status returns JSON) |
+| `--status-server <port>` | — | Enable local HTTP status server: GET / = dashboard HTML, GET /status or /api/status = JSON |
+| `--ngrok` | `false` | Start `ngrok http <port>` when status server is enabled; tunnel and process share the same lifecycle |
 
 ### Agent selection (`--agent`)
 
@@ -93,8 +111,7 @@ Example:
 
 ```markdown
 ## Pending
-- [ ] Complete Phase 5: Crash Detection & Recovery
-- [ ] Complete Phase 6: Web Dashboard
+- [ ] Your next goal
 
 ## In Progress
 <!-- moved here while running -->
@@ -102,6 +119,8 @@ Example:
 ## Done
 <!-- completed goals -->
 ```
+
+All roadmap phases (1–7) are implemented: Foundation, Lifecycle, Agent Integration, State Monitoring, Crash Detection & Recovery, Status Server, WSL Bootstrap. Use `goals.md` for new work items.
 
 ## Configuration
 
@@ -122,7 +141,8 @@ Config can come from a JSON file (`--config`) and is overridden by CLI options. 
 | `stateWatchDebounceMs` | `500` | STATE.md watcher debounce (≥ 100) |
 | `requireCleanGitBeforePlan` | `true` | Refuse execute-plan when git working tree is dirty |
 | `autoCheckpoint` | `false` | When true and tree dirty, create a checkpoint commit before plan |
-| `statusServerPort` | — | When set, start HTTP status server on this port |
+| `statusServerPort` | — | When set, start local HTTP status server on this port (dashboard + /api/status) |
+| `ngrok` | `false` | When true and status server is enabled, run `ngrok http <port>` for the process lifetime |
 
 Example `.autopilot/config.json`:
 
@@ -185,7 +205,9 @@ Resume uses this to re-run `execute-plan` for phase 2 plan 1 only, then continue
 - **requireCleanGitBeforePlan** (default `true`): the orchestrator refuses to run `execute-plan` when the git working tree has uncommitted changes, unless **autoCheckpoint** is `true`, in which case it creates a checkpoint commit first.
 - **How to recover manually:** (1) Inspect `session-log.jsonl` (last line = last run; `status` `crashed` or `running`). (2) Read `.planning/STATE.md` for "Current Position" (phase/plan). (3) Either run the daemon again with the same goal so it resumes automatically, or run `/gsd/execute-plan .planning/phases/<phase-dir>/<phase>-<plan>-PLAN.md` for the failed plan.
 
-**Status server and dashboard:** Use `--status-server <port>` to enable the HTTP status server (e.g. `./bin/gsd-unsupervised --goals goals.md --status-server 3000`). The daemon starts the server before the goal loop and closes it on shutdown. `GET /` serves the HTML dashboard; `GET /status` returns legacy JSON; `GET /api/status` returns rich JSON including `stateSnapshot`, session log window, git feed, and `systemLoad`. `GET /api/config` and `POST /api/config` expose and update `.planning/config.json` (used for the sequential/parallel toggle).
+**Status server and dashboard:** Use `--status-server <port>` to enable the local HTTP status server (e.g. `./bin/gsd-unsupervised --goals goals.md --status-server 4173`). Add `--ngrok` to have the daemon run `ngrok http <port>` for the same lifecycle: the public URL appears in ngrok’s output and the tunnel is closed when the daemon exits. `GET /` serves the HTML dashboard; `GET /status` returns legacy JSON; `GET /api/status` returns rich JSON including `stateSnapshot`, session log window, git feed, and `systemLoad`. `GET /api/config` and `POST /api/config` expose and update `.planning/config.json` (used for the sequential/parallel toggle).
+
+**SMS (Twilio):** Optional. Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, and `TWILIO_TO` to receive SMS on goal complete, goal failed, and daemon paused (after 3 retries). If any are unset, SMS is skipped and the daemon runs normally.
 
 ## Development
 

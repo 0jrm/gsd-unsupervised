@@ -34,6 +34,8 @@ export const AutopilotConfigSchema = z.object({
   autoCheckpoint: z.boolean().default(false),
   /** When set, start HTTP status server on this port (GET / or /status returns JSON). */
   statusServerPort: z.number().int().min(1).max(65535).optional(),
+  /** When true and statusServerPort is set, spawn `ngrok http <port>` for the duration of the daemon. */
+  ngrok: z.boolean().default(false),
 });
 
 export type AutopilotConfig = z.infer<typeof AutopilotConfigSchema>;

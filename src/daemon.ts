@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { stat, writeFile } from 'node:fs/promises';
 import type { AutopilotConfig } from './config.js';
@@ -61,6 +62,8 @@ export async function runDaemon(
 
   let currentGoal: string | null = null;
   let statusServerClose: (() => Promise<void>) | null = null;
+  let ngrokClose: (() => Promise<void>) | null = null;
+
   if (config.statusServerPort) {
     const { close } = createStatusServer(
       config.statusServerPort,
@@ -77,6 +80,32 @@ export async function runDaemon(
     );
     statusServerClose = close;
     logger.info({ port: config.statusServerPort }, 'Status server listening');
+
+    if (config.ngrok) {
+      const port = config.statusServerPort;
+      const child = spawn('ngrok', ['http', String(port)], {
+        stdio: 'inherit',
+        shell: false,
+      });
+      child.on('error', (err) => {
+        logger.warn({ err, port }, 'ngrok failed to start');
+      });
+      child.on('exit', (code, signal) => {
+        if (!shuttingDown && (code !== 0 || signal)) {
+          logger.info({ code, signal }, 'ngrok exited');
+        }
+      });
+      ngrokClose = (): Promise<void> =>
+        new Promise((resolve) => {
+          if (!child.killed && child.pid) {
+            child.once('exit', () => resolve());
+            child.kill('SIGTERM');
+          } else {
+            resolve();
+          }
+        });
+      logger.info({ port }, 'ngrok started (ngrok http %s)', port);
+    }
   }
 
   const plan = buildExecutionPlan(pending);
@@ -299,6 +328,9 @@ export async function runDaemon(
 
   if (!shuttingDown) {
     logger.info('All goals processed');
+  }
+  if (ngrokClose) {
+    await ngrokClose();
   }
   if (statusServerClose) {
     await statusServerClose();
