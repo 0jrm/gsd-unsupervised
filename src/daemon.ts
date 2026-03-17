@@ -27,6 +27,8 @@ export async function runDaemon(
     agentPath: config.cursorAgentPath,
     defaultTimeoutMs: config.agentTimeoutMs,
     sessionLogPath: config.sessionLogPath,
+    heartbeatPath: path.join(config.workspaceRoot, '.planning', 'heartbeat.txt'),
+    heartbeatIntervalMs: 15_000,
   });
 
   if (config.parallel) {
