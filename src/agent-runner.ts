@@ -94,15 +94,23 @@ export function runAgent(options: RunAgentOptions): Promise<RunAgentResult> {
     child.on('close', (code) => {
       if (timer) clearTimeout(timer);
 
-      const stderr = stderrChunks.join('') +
-        (timedOut ? `Agent timed out after ${timeoutMs}ms` : '');
+      const resultEvent = extractResult(events);
+      const parts = stderrChunks.slice();
+
+      if (timedOut) {
+        parts.push(`Agent timed out after ${timeoutMs}ms`);
+      }
+
+      if (code === 0 && !resultEvent) {
+        parts.push('Agent exited cleanly but produced no result event');
+      }
 
       resolve({
         sessionId: extractSessionId(events),
-        resultEvent: extractResult(events),
+        resultEvent,
         events,
         exitCode: code,
-        stderr,
+        stderr: parts.join(''),
       });
     });
   });
