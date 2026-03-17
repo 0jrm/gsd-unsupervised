@@ -19,7 +19,7 @@ None
 - [x] **Phase 3: Cursor Agent Integration** — Spawn cursor-agent headlessly, pipe GSD commands, capture output, handle process lifecycle
 - [x] **Phase 4: State Monitoring & Phase Transitions** — File watching on STATE.md, progress detection, automatic phase advancement
 - [x] **Phase 5: Crash Detection & Recovery** — Process health monitoring, dead agent detection, resume from exact failure point
-- [ ] **Phase 6: Web Dashboard** — Express server, plain HTML/CSS/JS dashboard with live status, progress bars, git feed, token tracking (06-01 agent-agnostic seam complete)
+- [ ] **Phase 6: Web Dashboard** — Express server, plain HTML/CSS/JS dashboard with live status, progress bars, git feed, token tracking (06-01 complete, 06-02 status API complete)
 - [ ] **Phase 7: WSL Bootstrap & Setup** — setup.sh script, WSL detection, path resolution, GSD rules copy, install validation
 
 ## Phase Details
@@ -71,7 +71,7 @@ None
 **Goal**: Mobile-friendly Express dashboard at localhost:3000 with live agent status, per-project progress bars, recent STATE.md updates, git commit feed, cost/token tracking, auto-refresh, and sequential/parallel mode toggle
 **Depends on**: Phase 5
 **Research**: Unlikely (Express + plain HTML/CSS/JS, no frameworks, established patterns)
-**Plans**: 06-01 agent-agnostic seam complete; 06-02 status API + dashboard backend; 06-03 dashboard UI
+**Plans**: 3 (06-01 agent-agnostic seam complete; 06-02 status API + dashboard backend complete; 06-03 dashboard UI)
 
 ### Phase 7: WSL Bootstrap & Setup
 **Goal**: One-command setup.sh that detects WSL, resolves Windows .cursor path, copies GSD rules, validates the install, and gets the full stack running
