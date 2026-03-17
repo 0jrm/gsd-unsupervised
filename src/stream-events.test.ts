@@ -135,6 +135,12 @@ describe('parseEvent', () => {
       expect(parseEvent('')).toBeNull();
     });
 
+    it('returns null for whitespace-only lines', () => {
+      expect(parseEvent('   ')).toBeNull();
+      expect(parseEvent('\t')).toBeNull();
+      expect(parseEvent('\n')).toBeNull();
+    });
+
     it('returns null for unknown event type', () => {
       const line = JSON.stringify({
         type: 'unknown_type',
@@ -162,6 +168,40 @@ describe('parseEvent', () => {
       const raw = event as Record<string, unknown>;
       expect(raw['extraField']).toBe('should not break');
       expect(raw['anotherExtra']).toBe(42);
+    });
+
+    it('returns null for truncated JSON lines', () => {
+      const truncated = '{"type":"system","subtype":"init"';
+      expect(parseEvent(truncated)).toBeNull();
+    });
+
+    it('parses valid events when mixed with noise lines', () => {
+      const validLine = JSON.stringify({
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'hello' }],
+        },
+        session_id: 'abc',
+      });
+
+      const lines = [
+        '',
+        'not json',
+        '   ',
+        validLine,
+        '{"type":"unknown"}',
+        '{"type":"system","subtype":"init"', // truncated
+      ];
+
+      const events = lines
+        .map((line) => parseEvent(line))
+        .filter((e): e is CursorStreamEvent => e !== null);
+
+      expect(events).toHaveLength(1);
+      expect(events[0].type).toBe('assistant');
+      const asst = events[0] as AssistantEvent;
+      expect(asst.message.content[0].text).toBe('hello');
     });
   });
 });
