@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { stat } from 'node:fs/promises';
 import type { AutopilotConfig } from './config.js';
 import type { Logger } from './logger.js';
 import { createChildLogger } from './logger.js';
@@ -6,6 +7,11 @@ import { loadGoals, getPendingGoals } from './goals.js';
 import { orchestrateGoal } from './orchestrator.js';
 import { createCursorAgentInvoker } from './cursor-agent.js';
 import { StateWatcher } from './state-watcher.js';
+import {
+  computeResumePoint,
+  inspectForCrashedSessions,
+  appendSessionLog,
+} from './session-log.js';
 
 let shuttingDown = false;
 
@@ -40,6 +46,47 @@ export async function runDaemon(
     logger.info('Sequential mode: processing goals one at a time');
   }
 
+  const stateMdPath = path.join(config.workspaceRoot, '.planning', 'STATE.md');
+  const heartbeatPath = path.join(config.workspaceRoot, '.planning', 'heartbeat.txt');
+  const heartbeatTimeoutMs = 60_000;
+
+  let resumeFrom: Awaited<ReturnType<typeof computeResumePoint>> = null;
+  if (pending.length > 0) {
+    const crashed = await inspectForCrashedSessions(config.sessionLogPath);
+    if (crashed?.status === 'running') {
+      try {
+        const st = await stat(heartbeatPath);
+        const ageMs = Date.now() - st.mtime.getTime();
+        if (ageMs > heartbeatTimeoutMs) {
+          await appendSessionLog(config.sessionLogPath, {
+            ...crashed,
+            timestamp: new Date().toISOString(),
+            status: 'crashed',
+            error: `Heartbeat timeout (>${heartbeatTimeoutMs / 1000}s)`,
+          });
+        }
+      } catch {
+        await appendSessionLog(config.sessionLogPath, {
+          ...crashed,
+          timestamp: new Date().toISOString(),
+          status: 'crashed',
+          error: 'Heartbeat timeout (missing)',
+        });
+      }
+    }
+    resumeFrom = await computeResumePoint(
+      config.sessionLogPath,
+      stateMdPath,
+      pending[0].title ?? '',
+    );
+    if (resumeFrom) {
+      logger.info(
+        { phaseNumber: resumeFrom.phaseNumber, planNumber: resumeFrom.planNumber },
+        'Resume point detected — will resume first goal from phase/plan',
+      );
+    }
+  }
+
   for (let i = 0; i < pending.length; i++) {
     const goal = pending[i];
 
@@ -50,7 +97,6 @@ export async function runDaemon(
 
     logger.info({ goal: goal.title }, `Processing goal: ${goal.title}`);
 
-    const stateMdPath = path.join(config.workspaceRoot, '.planning', 'STATE.md');
     let watcher: StateWatcher | null = null;
     try {
       watcher = new StateWatcher({
@@ -115,6 +161,7 @@ export async function runDaemon(
             'onProgress snapshot',
           );
         },
+        resumeFrom: i === 0 ? resumeFrom : null,
       });
       logger.info(
         { goal: goal.title, progress: `${i + 1}/${pending.length}` },

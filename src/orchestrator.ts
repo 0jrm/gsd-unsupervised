@@ -17,6 +17,7 @@ import {
 } from './roadmap-parser.js';
 import { readStateMd } from './state-parser.js';
 import type { StateSnapshot } from './state-parser.js';
+import type { ResumeFrom } from './session-log.js';
 
 export interface AgentResult {
   success: boolean;
@@ -46,8 +47,11 @@ export async function orchestrateGoal(options: {
   agent?: AgentInvoker;
   isShuttingDown: () => boolean;
   onProgress?: (snapshot: StateSnapshot) => void;
+  /** When set, orchestrator will resume from this phase/plan (used in 05-03). */
+  resumeFrom?: ResumeFrom | null;
 }): Promise<void> {
   const { goal, config, isShuttingDown, onProgress } = options;
+  // resumeFrom is consumed in 05-03 (fast-forward and retry)
   const logger = createChildLogger(options.logger, 'orchestrator');
   const agent = options.agent ?? stubAgent;
   const sm = new GoalStateMachine(goal.title);
