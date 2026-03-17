@@ -12,6 +12,12 @@ export const AutopilotConfigSchema = z.object({
   agentTimeoutMs: z.number().int().min(10000).default(600000),
   sessionLogPath: z.string().default('./session-log.jsonl'),
   stateWatchDebounceMs: z.number().int().min(100).default(500),
+  /** When true, refuse execute-plan when git working tree is dirty (default true). */
+  requireCleanGitBeforePlan: z.boolean().default(true),
+  /** When true and tree is dirty, create a checkpoint commit before execute-plan (default false). */
+  autoCheckpoint: z.boolean().default(false),
+  /** When set, start HTTP status server on this port (GET / or /status returns JSON). */
+  statusServerPort: z.number().int().min(1).max(65535).optional(),
 });
 
 export type AutopilotConfig = z.infer<typeof AutopilotConfigSchema>;
