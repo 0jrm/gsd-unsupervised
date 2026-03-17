@@ -1,15 +1,16 @@
-# GSD Autopilot
+### gsd-unsupervised
 
-Autonomous orchestrator that drives Cursor's headless agent through the full [GSD (Get Shit Done)](https://github.com/get-shit-done) lifecycle. It reads goals from a queue, invokes `cursor-agent` with GSD commands, monitors progress via `.planning/STATE.md`, and advances phases automatically. Built for reliable, hands-off goal-to-completion automation.
+Autonomous orchestrator that drives Cursor's headless agent through the full [GSD (Get Shit Done)](https://github.com/get-shit-done) lifecycle. It reads goals from a queue, invokes `cursor-agent` with GSD commands, monitors progress via `.planning/STATE.md`, and advances phases automatically. Built for reliable, hands-off goal-to-completion automation on a single machine.
 
 ## Features
 
-- **Goal queue** — Define work in `goals.md`; the daemon processes pending goals sequentially (or in parallel with `--parallel`).
-- **GSD lifecycle** — Runs `/gsd/new-project` → `/gsd/create-roadmap` → `/gsd/plan-phase` → `/gsd/execute-plan` (and related commands) in the correct order.
+- **Goal queue** — Define work in `goals.md`; the daemon processes pending goals sequentially or in parallel.
+- **GSD lifecycle** — Runs `/gsd/new-project` → `/gsd/create-roadmap` → `/gsd/plan-phase` → `/gsd/execute-plan` in the correct order.
 - **Cursor agent integration** — Spawns `cursor-agent` headlessly, streams commands, and handles process lifecycle (timeouts, tree-kill on shutdown).
 - **State monitoring** — Watches `.planning/STATE.md` for phase/plan progress and emits events (phase_advanced, plan_advanced, phase_completed, goal_completed).
-- **Crash detection & recovery** — Session log at project root, resume from exact phase/plan on next run, heartbeat for liveness (see [Crash detection and recovery](#crash-detection-and-recovery)).
-- **Planned** — Web dashboard, WSL bootstrap (see [Roadmap](#roadmap)).
+- **Crash detection & recovery** — Session log at project root, resume from exact phase/plan on next run, heartbeat for liveness.
+- **Resource governor** — CPU + memory headroom checks before each agent call so the daemon backs off instead of thrashing your box.
+- **Web dashboard** — Optional status server with HTML dashboard and `/api/status` JSON.
 
 ## Prerequisites
 
@@ -22,7 +23,7 @@ Autonomous orchestrator that drives Cursor's headless agent through the full [GS
 
 ```bash
 git clone <repo-url>
-cd gsd-cli-test
+cd gsd-unsupervised
 npm install
 npm run build
 ```
@@ -45,11 +46,11 @@ bash setup.sh --validate    # Bootstrap + validation checks + orchestrator smoke
 
 ```bash
 # Preview the goal queue (no API key needed)
-./bin/unsupervised-gsd --dry-run --goals goals.md
+./bin/gsd-unsupervised --dry-run --goals goals.md
 
 # Run the daemon (requires CURSOR_API_KEY)
 export CURSOR_API_KEY=your_key_here
-./bin/unsupervised-gsd --goals goals.md --verbose
+./bin/gsd-unsupervised --goals goals.md --verbose
 ```
 
 ### CLI options
@@ -123,7 +124,7 @@ Example `.autopilot/config.json`:
 ## Project structure
 
 ```
-├── bin/unsupervised-gsd     # CLI entry (Node)
+├── bin/gsd-unsupervised     # CLI entry (Node)
 ├── src/
 │   ├── cli.ts            # Commander setup, dry-run, daemon entry
 │   ├── config.ts         # Zod config schema and loader
@@ -142,7 +143,7 @@ Example `.autopilot/config.json`:
 └── package.json
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for module roles and data flow.
+See `docs/ARCHITECTURE.md` for module roles and data flow.
 
 ## Crash detection and recovery
 
@@ -171,7 +172,7 @@ Resume uses this to re-run `execute-plan` for phase 2 plan 1 only, then continue
 - **requireCleanGitBeforePlan** (default `true`): the orchestrator refuses to run `execute-plan` when the git working tree has uncommitted changes, unless **autoCheckpoint** is `true`, in which case it creates a checkpoint commit first.
 - **How to recover manually:** (1) Inspect `session-log.jsonl` (last line = last run; `status` `crashed` or `running`). (2) Read `.planning/STATE.md` for "Current Position" (phase/plan). (3) Either run the daemon again with the same goal so it resumes automatically, or run `/gsd/execute-plan .planning/phases/<phase-dir>/<phase>-<plan>-PLAN.md` for the failed plan.
 
-**Status server and dashboard:** Use `--status-server <port>` to enable the HTTP status server (e.g. `./bin/unsupervised-gsd --goals goals.md --status-server 3000`). The daemon starts the server before the goal loop and closes it on shutdown (SIGINT/SIGTERM). **GET /** — web dashboard (HTML): current agent, status, goal card with phase/plan progress, recent commits, token/cost summary; auto-refreshes every 10s from the JSON API. **GET /status** — legacy JSON `{ running, currentGoal?, phaseNumber?, planNumber?, heartbeat? }`. **GET /api/status** — dashboard JSON with same fields plus `currentAgentId`, `stateSnapshot`, `sessionLogEntries`, `gitFeed`, and placeholder `tokens`/`cost`. Open `http://localhost:PORT/` in a browser (on the WSL host or from another device on the same network via the machine’s IP). The dashboard includes an **execution mode** toggle (sequential/parallel); it updates `.planning/config.json` and takes effect on the next daemon run (or at startup if you start the daemon after toggling). **GET /api/config** and **POST /api/config** expose and update that config when the status server is started with dashboard options. **Heartbeat:** While the agent runs, `.planning/heartbeat.txt` is updated every 15s; if it’s missing or older than 60s with a `running` session, the next startup treats it as a crash and can resume.
+**Status server and dashboard:** Use `--status-server <port>` to enable the HTTP status server (e.g. `./bin/gsd-unsupervised --goals goals.md --status-server 3000`). The daemon starts the server before the goal loop and closes it on shutdown. `GET /` serves the HTML dashboard; `GET /status` returns legacy JSON; `GET /api/status` returns rich JSON including `stateSnapshot`, session log window, git feed, and `systemLoad`. `GET /api/config` and `POST /api/config` expose and update `.planning/config.json` (used for the sequential/parallel toggle).
 
 ## Development
 
@@ -182,20 +183,6 @@ npm run dev      # Watch build
 ```
 
 Tests include state parser, stream events, lifecycle, session-log, roadmap-parser, status-server, and resume integration. Run with `npm test` or `npm test -- state-parser`. Integration tests (crash/resume): `npm run test:integration`.
-
-## Roadmap
-
-| Phase | Status | Description |
-|-------|--------|-------------|
-| 1. Foundation & CLI | ✅ | Project setup, CLI, config, goals parser |
-| 2. Orchestration loop | ✅ | Sequential goals, GSD command order, lifecycle state machine |
-| 3. Cursor agent | ✅ | Headless cursor-agent, streaming, process lifecycle |
-| 4. State monitoring | ✅ | STATE.md watcher, progress events, daemon wiring |
-| 5. Crash detection | ✅ | Session log, resume from phase/plan, heartbeat, clean git, status server |
-| 6. Web dashboard | 🔲 | Live status, progress, git feed at localhost:3000 |
-| 7. WSL bootstrap | 🔲 | setup.sh, GSD rules copy, one-command install |
-
-Detailed plans live in `.planning/ROADMAP.md` and `.planning/phases/`.
 
 ## License
 

@@ -20,7 +20,7 @@ function getVersion(): string {
 const program = new Command();
 
 program
-  .name('unsupervised-gsd')
+  .name('gsd-unsupervised')
   .description('Autonomous orchestrator for Cursor agent + GSD framework')
   .version(getVersion())
   .option('--goals <path>', 'Path to goals.md file', './goals.md')
