@@ -93,8 +93,3 @@ Resume file: None
 - Headless cursor-agent requires CURSOR_API_KEY env var
 - setup.sh must check for it and guide user to obtain it
 - Without it, every orchestrator invocation will fail silently
-
-### Auth (Phase 7 concern)
-- Headless cursor-agent requires CURSOR_API_KEY env var
-- setup.sh must check for it and guide user to obtain it
-- Without it, every orchestrator invocation will fail silently
