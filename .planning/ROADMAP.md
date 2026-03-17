@@ -19,7 +19,7 @@ None
 - [x] **Phase 3: Cursor Agent Integration** — Spawn cursor-agent headlessly, pipe GSD commands, capture output, handle process lifecycle
 - [x] **Phase 4: State Monitoring & Phase Transitions** — File watching on STATE.md, progress detection, automatic phase advancement
 - [x] **Phase 5: Crash Detection & Recovery** — Process health monitoring, dead agent detection, resume from exact failure point
-- [ ] **Phase 6: Web Dashboard** — Express server, plain HTML/CSS/JS dashboard with live status, progress bars, git feed, token tracking
+- [x] **Phase 6: Web Dashboard** — Express server, plain HTML/CSS/JS dashboard with live status, progress bars, git feed, token tracking
 - [ ] **Phase 7: WSL Bootstrap & Setup** — setup.sh script, WSL detection, path resolution, GSD rules copy, install validation
 
 ## Phase Details
@@ -59,7 +59,7 @@ None
 **Goal**: Mobile-friendly Express dashboard at localhost:3000 with live agent status, per-project progress bars, recent STATE.md updates, git commit feed, cost/token tracking, auto-refresh, and sequential/parallel mode toggle. Agent-agnostic seam (--agent flag, pluggable factory).
 **Depends on**: Phase 5
 **Research**: Unlikely (Express + plain HTML/CSS/JS, no frameworks, established patterns)
-**Plans**: 3 (06-01 agent-agnostic seam; 06-02 status API + dashboard backend; 06-03 dashboard UI)
+**Plans**: 3/3 complete (06-01 agent-agnostic seam; 06-02 status API + dashboard backend; 06-03 dashboard UI)
 
 ### Phase 7: WSL Bootstrap & Setup
 **Goal**: One-command setup.sh that detects WSL, resolves Windows .cursor path, copies GSD rules, validates the install, and gets the full stack running
@@ -79,5 +79,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Cursor Agent Integration | 3/3 | Complete | 2026-03-16 |
 | 4. State Monitoring & Phase Transitions | 3/3 | Complete | 2026-03-16 |
 | 5. Crash Detection & Recovery | 4/4 | Complete | 2026-03-17 |
-| 6. Web Dashboard | 2/3 | In progress | - |
+| 6. Web Dashboard | 3/3 | Complete | 2026-03-16 |
 | 7. WSL Bootstrap & Setup | 0/TBD | Not started | - |
