@@ -53,6 +53,9 @@ export async function orchestrateGoal(options: {
 }): Promise<void> {
   const { goal, config, isShuttingDown, onProgress, resumeFrom } = options;
   const logger = createChildLogger(options.logger, 'orchestrator');
+  const agentComponent =
+    config.agent === 'cursor' ? 'cursor-agent' : config.agent;
+  const agentLogger = createChildLogger(options.logger, agentComponent);
   const agent = options.agent ?? stubAgent;
   const sm = new GoalStateMachine(goal.title);
   const stateMdPath = path.join(config.workspaceRoot, '.planning', 'STATE.md');
@@ -152,7 +155,7 @@ export async function orchestrateGoal(options: {
         { cmd: execCmd.command, plan: targetPlan.planNumber },
         `Resume: ${execCmd.command} ${execCmd.args}`,
       );
-      let result = await agent(execCmd, config.workspaceRoot, logger, {
+      let result = await agent(execCmd, config.workspaceRoot, agentLogger, {
         goalTitle: goal.title,
         phaseNumber: phaseNum,
         planNumber: targetPlan.planNumber,
@@ -180,7 +183,7 @@ export async function orchestrateGoal(options: {
         };
         sm.setLastCommand(cmd);
         logger.info({ cmd: cmd.command, plan: nextPlan.planNumber }, `Executing: ${cmd.command} ${cmd.args}`);
-        result = await agent(cmd, config.workspaceRoot, logger, {
+        result = await agent(cmd, config.workspaceRoot, agentLogger, {
           goalTitle: goal.title,
           phaseNumber: phaseNum,
           planNumber: nextPlan.planNumber,
@@ -212,7 +215,7 @@ export async function orchestrateGoal(options: {
           description: `Plan phase ${p.number}`,
         };
         sm.setLastCommand(planCmd);
-        result = await agent(planCmd, config.workspaceRoot, logger, {
+        result = await agent(planCmd, config.workspaceRoot, agentLogger, {
           goalTitle: goal.title,
           phaseNumber: pNum,
         });
@@ -243,7 +246,7 @@ export async function orchestrateGoal(options: {
             description: `Execute plan ${pNext.planNumber}`,
           };
           sm.setLastCommand(exec);
-          result = await agent(exec, config.workspaceRoot, logger, {
+          result = await agent(exec, config.workspaceRoot, agentLogger, {
             goalTitle: goal.title,
             phaseNumber: pNum,
             planNumber: pNext.planNumber,
@@ -274,7 +277,7 @@ export async function orchestrateGoal(options: {
     const initCmd = sm.getNextCommand()!;
     sm.setLastCommand(initCmd);
     logger.info({ cmd: initCmd.command }, `Executing: ${initCmd.command}`);
-    let result = await agent(initCmd, config.workspaceRoot, logger, { goalTitle: goal.title });
+    let result = await agent(initCmd, config.workspaceRoot, agentLogger, { goalTitle: goal.title });
     if (!result.success) {
       sm.fail(result.error ?? 'Agent failed');
       return;
@@ -290,7 +293,7 @@ export async function orchestrateGoal(options: {
     const roadmapCmd = sm.getNextCommand()!;
     sm.setLastCommand(roadmapCmd);
     logger.info({ cmd: roadmapCmd.command }, `Executing: ${roadmapCmd.command}`);
-    result = await agent(roadmapCmd, config.workspaceRoot, logger, { goalTitle: goal.title });
+    result = await agent(roadmapCmd, config.workspaceRoot, agentLogger, { goalTitle: goal.title });
     if (!result.success) {
       sm.fail(result.error ?? 'Agent failed');
       return;
@@ -325,7 +328,7 @@ export async function orchestrateGoal(options: {
         { cmd: planCmd.command, phase: phase.number },
         `Executing: ${planCmd.command} ${planCmd.args}`,
       );
-      result = await agent(planCmd, config.workspaceRoot, logger, {
+      result = await agent(planCmd, config.workspaceRoot, agentLogger, {
         goalTitle: goal.title,
         phaseNumber: phaseNum,
       });
@@ -386,7 +389,7 @@ export async function orchestrateGoal(options: {
           { cmd: execCmd.command, plan: nextPlan.planNumber },
           `Executing: ${execCmd.command} ${execCmd.args}`,
         );
-        result = await agent(execCmd, config.workspaceRoot, logger, {
+        result = await agent(execCmd, config.workspaceRoot, agentLogger, {
           goalTitle: goal.title,
           phaseNumber: phaseNum,
           planNumber: nextPlan.planNumber,
