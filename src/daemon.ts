@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import type { AutopilotConfig } from './config.js';
 import type { Logger } from './logger.js';
@@ -114,9 +115,17 @@ export async function runDaemon(
     }
   }
 
+  const pauseFlagPath = path.join(config.workspaceRoot, '.pause-autopilot');
+
   for (let i = 0; i < pending.length; i++) {
     const goal = pending[i];
     currentGoal = goal.title;
+
+    // Pause/dormant mode: sleep while .pause-autopilot exists
+    while (existsSync(pauseFlagPath)) {
+      logger.info('Pause flag (.pause-autopilot) detected – sleeping 60s');
+      await new Promise((r) => setTimeout(r, 60_000));
+    }
 
     if (shuttingDown) {
       logger.warn('Shutdown requested — stopping after current goal');
