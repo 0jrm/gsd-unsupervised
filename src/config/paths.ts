@@ -1,4 +1,4 @@
-import type { AutopilotConfig } from './config.js';
+import type { AutopilotConfig } from '../config.js';
 import { isWsl, toWindowsPath } from './wsl.js';
 
 export function getCursorBinaryPath(config: AutopilotConfig): string {

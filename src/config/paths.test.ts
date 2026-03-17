@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { AutopilotConfig } from './config.js';
+import type { AutopilotConfig } from '../config.js';
 import * as wslHelpers from './wsl.js';
 import { getClipExePath, getCursorBinaryPath, getWorkspaceDisplayPath } from './paths.js';
 
