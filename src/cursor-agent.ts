@@ -105,7 +105,7 @@ export function createCursorAgentInvoker(agentConfig: CursorAgentConfig): AgentI
       });
 
       const durationMs = Date.now() - startMs;
-      const timedOut = result.stderr.includes('timed out');
+      const timedOut = result.timedOut;
 
       await stopHeartbeat();
 

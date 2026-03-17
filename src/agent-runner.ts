@@ -39,6 +39,7 @@ export interface RunAgentResult {
   resultEvent: ResultEvent | null;
   events: CursorStreamEvent[];
   exitCode: number | null;
+  timedOut: boolean;
   stderr: string;
 }
 
@@ -124,6 +125,7 @@ export function runAgent(options: RunAgentOptions): Promise<RunAgentResult> {
         resultEvent,
         events,
         exitCode: code,
+        timedOut,
         stderr: parts.join(''),
       });
     });
