@@ -53,7 +53,7 @@ None
 **Goal**: Detect when cursor-agent dies mid-phase, parse STATE.md for last known position, and automatically resume from exactly that point with no lost work
 **Depends on**: Phase 4
 **Research**: Unlikely (Node.js process management, internal patterns)
-**Plans**: TBD
+**Plans**: 3 plans (05-01 session log enrichment, 05-02 startup resume detection, 05-03 orchestrator resume path)
 
 ### Phase 6: Web Dashboard
 **Goal**: Mobile-friendly Express dashboard at localhost:3000 with live agent status, per-project progress bars, recent STATE.md updates, git commit feed, cost/token tracking, auto-refresh, and sequential/parallel mode toggle
@@ -78,6 +78,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Core Orchestration Loop | 3/3 | Complete | 2026-03-16 |
 | 3. Cursor Agent Integration | 3/3 | Complete | 2026-03-16 |
 | 4. State Monitoring & Phase Transitions | 3/3 | Complete | 2026-03-16 |
-| 5. Crash Detection & Recovery | 0/TBD | Not started | - |
+| 5. Crash Detection & Recovery | 0/3 | Not started | - |
 | 6. Web Dashboard | 0/TBD | Not started | - |
 | 7. WSL Bootstrap & Setup | 0/TBD | Not started | - |
