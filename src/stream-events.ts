@@ -99,8 +99,12 @@ export function extractSessionId(events: CursorStreamEvent[]): string | null {
 }
 
 export function extractResult(events: CursorStreamEvent[]): ResultEvent | null {
-  const result = events.find(
-    (e): e is ResultEvent => e.type === 'result',
-  );
-  return result ?? null;
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const e = events[i];
+    if (e.type === 'result') {
+      return e as ResultEvent;
+    }
+  }
+
+  return null;
 }

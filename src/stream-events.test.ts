@@ -233,6 +233,73 @@ describe('extractResult', () => {
     expect(extractResult(events)).toEqual(resultEvent);
   });
 
+  it('returns the last ResultEvent when multiple exist', () => {
+    const first: ResultEvent = {
+      type: 'result',
+      subtype: 'success',
+      duration_ms: 1000,
+      duration_api_ms: 900,
+      is_error: false,
+      result: 'first',
+      session_id: 'sess-1',
+    };
+
+    const last: ResultEvent = {
+      type: 'result',
+      subtype: 'success',
+      duration_ms: 2000,
+      duration_api_ms: 1800,
+      is_error: false,
+      result: 'last',
+      session_id: 'sess-1',
+    };
+
+    const events: CursorStreamEvent[] = [
+      {
+        type: 'system',
+        subtype: 'init',
+        session_id: 'sess-1',
+        model: 'claude-4',
+        cwd: '/tmp',
+        apiKeySource: 'env',
+        permissionMode: 'auto',
+      } as SystemInitEvent,
+      first,
+      last,
+    ];
+
+    expect(extractResult(events)).toEqual(last);
+  });
+
+  it('prefers the last ResultEvent even when it represents an error', () => {
+    const success: ResultEvent = {
+      type: 'result',
+      subtype: 'success',
+      duration_ms: 1000,
+      duration_api_ms: 900,
+      is_error: false,
+      result: 'ok',
+      session_id: 'sess-1',
+    };
+
+    const error: ResultEvent = {
+      type: 'result',
+      subtype: 'error',
+      duration_ms: 1500,
+      duration_api_ms: 1400,
+      is_error: true,
+      result: 'boom',
+      session_id: 'sess-1',
+    };
+
+    const events: CursorStreamEvent[] = [success, error];
+
+    const result = extractResult(events);
+    expect(result).toEqual(error);
+    expect(result!.is_error).toBe(true);
+    expect(result!.result).toBe('boom');
+  });
+
   it('returns null when no ResultEvent exists', () => {
     const events: CursorStreamEvent[] = [
       {
