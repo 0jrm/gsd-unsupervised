@@ -41,6 +41,46 @@ async function getGitSha(workspaceRoot: string): Promise<string> {
   }
 }
 
+export async function reportProgress(options: {
+  stateMdPath: string;
+  logger: Logger;
+  onProgress?: (snapshot: StateSnapshot) => void;
+  expectedPhase: number;
+  expectedSummaryPath?: string;
+}): Promise<void> {
+  const { stateMdPath, logger, onProgress, expectedPhase, expectedSummaryPath } = options;
+
+  const snapshot = await readStateMd(stateMdPath);
+  if (snapshot === null) return;
+
+  if (onProgress) {
+    onProgress(snapshot);
+  }
+
+  if (snapshot.phaseNumber !== expectedPhase) {
+    logger.warn(
+      {
+        expectedPhase,
+        actualPhase: snapshot.phaseNumber,
+        actualPhaseName: snapshot.phaseName,
+        plan: snapshot.planNumber,
+        status: snapshot.status,
+      },
+      'STATE.md phase mismatch with orchestrator expectation',
+    );
+  }
+
+  if (expectedSummaryPath) {
+    const ok = existsSync(expectedSummaryPath);
+    if (!ok) {
+      logger.warn(
+        { expectedSummaryPath },
+        'Expected SUMMARY file not found after successful agent call',
+      );
+    }
+  }
+}
+
 async function writeDaemonStateMd(options: {
   stateMdPath: string;
   phaseNumber: number;
@@ -154,22 +194,6 @@ export async function orchestrateGoal(options: {
     });
   }
 
-  async function reportProgress(options: { expectedPhase: number; expectedSummaryPath?: string }): Promise<void> {
-    if (!onProgress) return;
-    const snapshot = await readStateMd(stateMdPath);
-    if (snapshot === null) return;
-    onProgress(snapshot);
-    if (options.expectedSummaryPath) {
-      const ok = existsSync(options.expectedSummaryPath);
-      if (!ok) {
-        logger.warn(
-          { expectedSummaryPath: options.expectedSummaryPath },
-          'Expected SUMMARY file not found after successful agent call',
-        );
-      }
-    }
-  }
-
   try {
     const roadmapPath = path.join(config.workspaceRoot, '.planning', 'ROADMAP.md');
     const gitSha = await getGitSha(config.workspaceRoot);
@@ -275,7 +299,13 @@ export async function orchestrateGoal(options: {
         lastActivity: new Date().toISOString(),
         gitSha: await getGitSha(config.workspaceRoot),
       });
-      await reportProgress({ expectedPhase: phaseNum, expectedSummaryPath: targetPlan.summaryPath });
+      await reportProgress({
+        stateMdPath,
+        logger,
+        onProgress,
+        expectedPhase: phaseNum,
+        expectedSummaryPath: targetPlan.summaryPath,
+      });
       sm.setPlanInfo(targetPlan.planNumber + 1, plans.length);
       plans = await discoverPlans(phaseDir);
       let nextPlan = getNextUnexecutedPlan(plans);
@@ -320,7 +350,13 @@ export async function orchestrateGoal(options: {
           lastActivity: new Date().toISOString(),
           gitSha: await getGitSha(config.workspaceRoot),
         });
-        await reportProgress({ expectedPhase: phaseNum, expectedSummaryPath: nextPlan.summaryPath });
+        await reportProgress({
+          stateMdPath,
+          logger,
+          onProgress,
+          expectedPhase: phaseNum,
+          expectedSummaryPath: nextPlan.summaryPath,
+        });
         sm.setPlanInfo(nextPlan.planNumber + 1, plans.length);
         plans = await discoverPlans(phaseDir);
         nextPlan = getNextUnexecutedPlan(plans);
@@ -367,7 +403,12 @@ export async function orchestrateGoal(options: {
           lastActivity: new Date().toISOString(),
           gitSha: await getGitSha(config.workspaceRoot),
         });
-        await reportProgress({ expectedPhase: pNum });
+        await reportProgress({
+          stateMdPath,
+          logger,
+          onProgress,
+          expectedPhase: pNum,
+        });
         const pDir = findPhaseDir(phasesRoot, p.number);
         if (!pDir) {
           sm.advance(GoalLifecyclePhase.PhaseComplete);
@@ -416,7 +457,13 @@ export async function orchestrateGoal(options: {
             lastActivity: new Date().toISOString(),
             gitSha: await getGitSha(config.workspaceRoot),
           });
-          await reportProgress({ expectedPhase: pNum, expectedSummaryPath: pNext.summaryPath });
+          await reportProgress({
+            stateMdPath,
+            logger,
+            onProgress,
+            expectedPhase: pNum,
+            expectedSummaryPath: pNext.summaryPath,
+          });
           sm.setPlanInfo(pNext.planNumber + 1, pPlans.length);
           pPlans = await discoverPlans(pDir);
           pNext = getNextUnexecutedPlan(pPlans);
@@ -487,7 +534,12 @@ export async function orchestrateGoal(options: {
       lastActivity: new Date().toISOString(),
       gitSha: await getGitSha(config.workspaceRoot),
     });
-    await reportProgress({ expectedPhase: 1 });
+    await reportProgress({
+      stateMdPath,
+      logger,
+      onProgress,
+      expectedPhase: 0,
+    });
     sm.advance(GoalLifecyclePhase.InitializingProject);
 
     // initializing_project → creating_roadmap
@@ -530,7 +582,12 @@ export async function orchestrateGoal(options: {
       lastActivity: new Date().toISOString(),
       gitSha: await getGitSha(config.workspaceRoot),
     });
-    await reportProgress({ expectedPhase: 1 });
+    await reportProgress({
+      stateMdPath,
+      logger,
+      onProgress,
+      expectedPhase: 0,
+    });
     sm.advance(GoalLifecyclePhase.CreatingRoadmap);
 
     // creating_roadmap → phase loop
@@ -595,7 +652,12 @@ export async function orchestrateGoal(options: {
           lastActivity: new Date().toISOString(),
           gitSha: await getGitSha(config.workspaceRoot),
         });
-        await reportProgress({ expectedPhase: phaseNum });
+        await reportProgress({
+          stateMdPath,
+          logger,
+          onProgress,
+          expectedPhase: phaseNum,
+        });
       }
 
       const phasesRoot = path.join(config.workspaceRoot, '.planning', 'phases');
@@ -675,7 +737,13 @@ export async function orchestrateGoal(options: {
           lastActivity: new Date().toISOString(),
           gitSha: await getGitSha(config.workspaceRoot),
         });
-        await reportProgress({ expectedPhase: phaseNum, expectedSummaryPath: nextPlan.summaryPath });
+        await reportProgress({
+          stateMdPath,
+          logger,
+          onProgress,
+          expectedPhase: phaseNum,
+          expectedSummaryPath: nextPlan.summaryPath,
+        });
 
         sm.setPlanInfo(nextPlan.planNumber + 1, plans.length);
         plans = await discoverPlans(phaseDir);

@@ -37,7 +37,7 @@ The orchestrator drives GSD via an **AgentInvoker** function-type seam: it does 
    - Creates **StateWatcher** (chokidar on STATE.md), registers progress listeners, starts it.
    - Calls **orchestrator** with the goal, config, logger, agent, and optional `onProgress`.
    - On exit (success or failure), stops the watcher.
-3. **Orchestrator** runs the GSD lifecycle state machine: loads roadmap, discovers phases/plans, and for each step invokes the **agent** with the right GSD command (`/gsd/new-project`, `/gsd/create-roadmap`, `/gsd/plan-phase`, `/gsd/execute-plan`, etc.). After each successful agent call it calls `reportProgress(expectedPhase)` (reads STATE.md, calls `onProgress`, logs a warning if phase mismatch).
+3. **Orchestrator** runs the GSD lifecycle state machine: loads roadmap, discovers phases/plans, and for each step invokes the **agent** with the right GSD command (`/gsd/new-project`, `/gsd/create-roadmap`, `/gsd/plan-phase`, `/gsd/execute-plan`, etc.). After each successful agent call it calls `reportProgress(expectedPhase)` (reads STATE.md, calls `onProgress` when provided, and logs a non-fatal structured warning when the STATE.md phase number does not match the orchestrator’s expected phase, including `{ expectedPhase, actualPhase, actualPhaseName, plan, status }` in the log context).
 4. **StateWatcher** parses STATE.md on add/change (debounced), compares with previous snapshot, and emits `state_changed`, `phase_advanced`, `plan_advanced`, `phase_completed`, `goal_completed` as appropriate.
 
 ## Module roles
@@ -60,7 +60,7 @@ The orchestrator drives GSD via an **AgentInvoker** function-type seam: it does 
 ## Key design choices
 
 - **StateWatcher optional** — If construction fails, daemon logs a warning and continues without watching.
-- **reportProgress non-fatal** — State mismatch only logs a warning; orchestration does not fail.
+- **reportProgress non-fatal** — State mismatch only logs a structured warning; orchestration does not fail, and pre-phase steps (project init and roadmap creation) use `expectedPhase: 0` to match the daemon-written STATE.md.
 - **Stub agent default** — Orchestrator uses a stub when no invoker is passed (tests and dry-run).
 - **Single invoker per run** — One cursor-agent invoker is created in the daemon and reused for all goals in the run.
 - **Per-goal watcher** — Each goal gets its own StateWatcher, started before and stopped after orchestrateGoal.
