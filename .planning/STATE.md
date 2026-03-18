@@ -3,10 +3,8 @@
 ## Current Position
 
 Phase: 1 of 7 (Foundation)
-Plan: 0 of 3 in current phase
-Status: Phase 1 planned; ready for execution
-Last activity: 2026-03-18 (plan-phase 1)
+Plan: 0 of 3 in current phase (planned, not yet executing)
+Status: Phase 1 planned — ready for execution
+Last activity: 2026-03-18 (plan-phase 1 confirmed)
 
-Plans in phase: 01-01 (CLI scaffold), 01-02 (Config and goals), 01-03 (Roadmap and phase discovery)
-
-Git SHA: (run git rev-parse HEAD for current)
+Git SHA: f578cca81ba8920b48c770cb3ca3bf40c0a3a2fe
