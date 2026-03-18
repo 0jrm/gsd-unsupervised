@@ -15,8 +15,8 @@ Output: Validation of features, any issues logged to phase-scoped ISSUES.md
 </objective>
 
 <execution_context>
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/workflows/verify-work.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/uat-issues.md`
+Read file: `.gsd-framework/workflows/verify-work.md`
+Read file: `.gsd-framework/templates/uat-issues.md`
 </execution_context>
 
 <context>

@@ -14,12 +14,12 @@ Output: One or more PLAN.md files in the phase directory (.planning/phases/XX-na
 </objective>
 
 <execution_context>
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/workflows/plan-phase.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/phase-prompt.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/references/plan-format.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/references/scope-estimation.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/references/checkpoints.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/references/tdd.md`
+Read file: `.gsd-framework/workflows/plan-phase.md`
+Read file: `.gsd-framework/templates/phase-prompt.md`
+Read file: `.gsd-framework/references/plan-format.md`
+Read file: `.gsd-framework/references/scope-estimation.md`
+Read file: `.gsd-framework/references/checkpoints.md`
+Read file: `.gsd-framework/references/tdd.md`
 </execution_context>
 
 <context>

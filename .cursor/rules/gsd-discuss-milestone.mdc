@@ -14,7 +14,7 @@ Output: Context gathered, then routes to /gsd/new-milestone
 </objective>
 
 <execution_context>
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/workflows/discuss-milestone.md`
+Read file: `.gsd-framework/workflows/discuss-milestone.md`
 </execution_context>
 
 <context>

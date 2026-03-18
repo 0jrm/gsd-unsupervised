@@ -18,10 +18,10 @@ Creates `.planning/` with PROJECT.md and config.json.
 
 <execution_context>
 
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/references/principles.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/references/questioning.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/project.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/config.json`
+Read file: `.gsd-framework/references/principles.md`
+Read file: `.gsd-framework/references/questioning.md`
+Read file: `.gsd-framework/templates/project.md`
+Read file: `.gsd-framework/templates/config.json`
 
 </execution_context>
 
@@ -279,7 +279,7 @@ Use a cross-platform git command (no bash heredoc). For example, pass multiple `
 
 <step name="done">
 
-Present completion with next steps (see /mnt/c/Users/jrm22n/.cursor/get-shit-done/references/continuation-format.md):
+Present completion with next steps (see .gsd-framework/references/continuation-format.md):
 
 ```
 Project initialized:

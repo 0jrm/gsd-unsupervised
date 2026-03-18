@@ -15,8 +15,8 @@ Output: {phase}-CONTEXT.md capturing the user's vision for the phase
 </objective>
 
 <execution_context>
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/workflows/discuss-phase.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/context.md`
+Read file: `.gsd-framework/workflows/discuss-phase.md`
+Read file: `.gsd-framework/templates/context.md`
 </execution_context>
 
 <context>

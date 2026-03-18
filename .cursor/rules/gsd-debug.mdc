@@ -14,8 +14,8 @@ If starting new: gather symptoms, then investigate autonomously.
 </objective>
 
 <execution_context>
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/workflows/debug.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/DEBUG.md`
+Read file: `.gsd-framework/workflows/debug.md`
+Read file: `.gsd-framework/templates/DEBUG.md`
 </execution_context>
 
 <context>
@@ -27,7 +27,7 @@ Check for active debug sessions:
 </context>
 
 <process>
-Follow the workflow in Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/workflows/debug.md`
+Follow the workflow in `.gsd-framework/workflows/debug.md`
 
 **Quick reference:**
 

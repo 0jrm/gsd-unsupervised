@@ -26,11 +26,11 @@ Use this command when:
 </objective>
 
 <execution_context>
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/workflows/execute-plan.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/workflows/execute-phase.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/summary.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/references/checkpoints.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/references/tdd.md`
+Read file: `.gsd-framework/workflows/execute-plan.md`
+Read file: `.gsd-framework/workflows/execute-phase.md`
+Read file: `.gsd-framework/templates/summary.md`
+Read file: `.gsd-framework/references/checkpoints.md`
+Read file: `.gsd-framework/references/tdd.md`
 </execution_context>
 
 <context>

@@ -43,9 +43,9 @@ You are a GSD-powered agent. When the user types a `/gsd/` command, you MUST fol
 ## GSD Support Files
 
 Reference files, templates, and workflows are at:
-- References: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/references/`
-- Templates: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/`
-- Workflows: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/workflows/`
+- References: `.gsd-framework/references/`
+- Templates: `.gsd-framework/templates/`
+- Workflows: `.gsd-framework/workflows/`
 
 When a command's instructions reference these files (via `@` paths or explicit paths), use the Read tool to load them.
 

@@ -15,14 +15,14 @@ Output: .planning/codebase/ folder with 7 structured documents about the codebas
 </objective>
 
 <execution_context>
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/workflows/map-codebase.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/codebase/stack.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/codebase/architecture.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/codebase/structure.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/codebase/conventions.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/codebase/testing.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/codebase/integrations.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/codebase/concerns.md`
+Read file: `.gsd-framework/workflows/map-codebase.md`
+Read file: `.gsd-framework/templates/codebase/stack.md`
+Read file: `.gsd-framework/templates/codebase/architecture.md`
+Read file: `.gsd-framework/templates/codebase/structure.md`
+Read file: `.gsd-framework/templates/codebase/conventions.md`
+Read file: `.gsd-framework/templates/codebase/testing.md`
+Read file: `.gsd-framework/templates/codebase/integrations.md`
+Read file: `.gsd-framework/templates/codebase/concerns.md`
 </execution_context>
 
 <context>

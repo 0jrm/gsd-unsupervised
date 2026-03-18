@@ -14,8 +14,8 @@ Output: New milestone in ROADMAP.md, updated STATE.md, phase directories created
 </objective>
 
 <execution_context>
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/workflows/create-milestone.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/roadmap.md`
+Read file: `.gsd-framework/workflows/create-milestone.md`
+Read file: `.gsd-framework/templates/roadmap.md`
 </execution_context>
 
 <context>

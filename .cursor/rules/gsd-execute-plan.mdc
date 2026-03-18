@@ -20,10 +20,10 @@ Uses intelligent segmentation:
   </objective>
 
 <execution_context>
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/workflows/execute-plan.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/templates/summary.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/references/checkpoints.md`
-Read file: `/mnt/c/Users/jrm22n/.cursor/get-shit-done/references/tdd.md`
+Read file: `.gsd-framework/workflows/execute-plan.md`
+Read file: `.gsd-framework/templates/summary.md`
+Read file: `.gsd-framework/references/checkpoints.md`
+Read file: `.gsd-framework/references/tdd.md`
 </execution_context>
 
 <context>
@@ -106,7 +106,7 @@ After all tasks complete:
 
 **Always stage files individually.**
 
-See /mnt/c/Users/jrm22n/.cursor/get-shit-done/references/git-integration.md for full commit strategy.
+See .gsd-framework/references/git-integration.md for full commit strategy.
 </commit_rules>
 
 <success_criteria>
