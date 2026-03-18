@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import os from 'node:os';
 import { currentLoadInfo, waitForHeadroom } from './resource-governor.js';
 
 describe('resource-governor', () => {
@@ -39,6 +40,40 @@ describe('resource-governor', () => {
       }),
     ).resolves.toBeUndefined();
     expect(logger.warn).toHaveBeenCalled();
+  });
+
+  it('waitForHeadroom delays when memory fraction exceeds maxMemoryFraction', async () => {
+    const logger = { debug: vi.fn(), warn: vi.fn() };
+    const totalMem = 1_000_000_000;
+    const freeMem = 100_000_000; // 90% used
+    vi.spyOn(os, 'totalmem').mockReturnValue(totalMem);
+    vi.spyOn(os, 'freemem').mockReturnValue(freeMem);
+    vi.spyOn(os, 'loadavg').mockReturnValue([0, 0, 0]); // CPU idle so only memory gates
+
+    const start = Date.now();
+    const p = waitForHeadroom({
+      maxCpuFraction: 0.99,
+      maxMemoryFraction: 0.8,
+      pollIntervalMs: 50,
+      maxWaitMs: 200,
+      logger,
+    });
+    await p;
+    const elapsed = Date.now() - start;
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        load: expect.objectContaining({
+          memoryFraction: 0.9,
+          maxMemoryFraction: 0.8,
+          freeMemBytes: freeMem,
+          totalMemBytes: totalMem,
+        }),
+      }),
+      'resource-governor: high system load detected, waiting for headroom',
+    );
+    expect(elapsed).toBeGreaterThanOrEqual(50);
+    vi.restoreAllMocks();
   });
 });
 
