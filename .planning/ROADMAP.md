@@ -23,7 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 5: Crash Detection & Recovery** — Session log, resume-from phase/plan, heartbeat
 - [ ] **Phase 6: Status Server** — HTTP status endpoint, daemon graceful shutdown
 - [ ] **Phase 7: WSL Bootstrap** — Setup script, path resolution (Cursor, clip.exe, WSL)
-- [ ] **Phase 8: CN (Continue CLI) Support** — Add `cn` as first-class agent alongside cursor; adapter, output parsing, GSD rules compatibility
+- [x] **Phase 8: CN (Continue CLI) Support** — Add `cn` as first-class agent alongside cursor; adapter, output parsing, GSD rules compatibility
 
 ## Phase Details
 
@@ -108,7 +108,7 @@ Plans:
 Plans:
 - [x] 08-01: cn adapter core (runContinueCli, parseCnOutput, config)
 - [x] 08-02: Agent registry, createAgentInvoker, GSD rules compatibility
-- [ ] 08-03: Tests and documentation
+- [x] 08-03: Tests and documentation
 
 ## Progress
 
@@ -124,4 +124,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 5. Crash Detection & Recovery | 2/2 | Complete | 2026-03-17 |
 | 6. Status Server | 1/1 | Complete | 2026-03-17 |
 | 7. WSL Bootstrap | 2/2 | Complete | 2026-03-17 |
-| 8. CN (Continue CLI) Support | 1/3 | In progress | — |
+| 8. CN (Continue CLI) Support | 3/3 | Complete | 2026-03-18 |
