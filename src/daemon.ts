@@ -314,7 +314,7 @@ export async function runDaemon(
       }, goalsReloadDebounceMs);
     } else {
       goalsReloadTimer = null;
-      void doReload();
+      setImmediate(() => void doReload());
     }
   });
 

@@ -28,24 +28,14 @@ vi.mock('../src/intake/clarifier.js', async (importOriginal) => {
   };
 });
 
-let changeHandler: (() => void) | undefined;
-const mockWatcher = {
-  on: vi.fn((ev: string, cb: () => void) => {
-    if (ev === 'change') changeHandler = cb;
-    return mockWatcher;
-  }),
-  close: vi.fn(),
-};
-const chokidarWatch = vi.fn(() => mockWatcher);
-vi.mock('chokidar', () => ({
-  default: { watch: (path: string, opts?: object) => chokidarWatch(path, opts) },
-}));
+// Use real chokidar so writing .gsd/goals-updated actually fires the change handler.
+// No chokidar mock.
 
 describe('daemon goals reload', () => {
   let workspace: string;
   let goalsPath: string;
 
-  function mkConfig() {
+  function mkConfig(overrides?: Record<string, unknown>) {
     return {
       goalsPath,
       parallel: false,
@@ -60,6 +50,7 @@ describe('daemon goals reload', () => {
       stateWatchDebounceMs: 500,
       requireCleanGitBeforePlan: false,
       autoCheckpoint: true,
+      ...overrides,
     };
   }
 
@@ -68,6 +59,7 @@ describe('daemon goals reload', () => {
     goalsPath = join(workspace, 'goals.md');
     mkdirSync(join(workspace, '.planning'), { recursive: true });
     mkdirSync(join(workspace, '.gsd'), { recursive: true });
+    writeFileSync(join(workspace, '.gsd', 'goals-updated'), 'initial\n', 'utf-8');
     writeFileSync(
       goalsPath,
       '## Pending\n- [ ] First goal\n\n## In Progress\n\n## Done\n',
@@ -84,10 +76,6 @@ describe('daemon goals reload', () => {
       'utf-8',
     );
     orchestrateResolvers.length = 0;
-    changeHandler = undefined;
-    chokidarWatch.mockClear();
-    vi.mocked(mockWatcher.on).mockClear();
-    vi.mocked(mockWatcher.close).mockClear();
     expirePendingGoalsSpy.mockClear();
   });
 
@@ -100,22 +88,41 @@ describe('daemon goals reload', () => {
     }
   });
 
-  it('watches .gsd/goals-updated and registers change handler', async () => {
+  it('reloads goals when .gsd/goals-updated changes and enqueues new pending goals', async () => {
+    const orchestrateCalls: string[] = [];
+    const { orchestrateGoal } = await import('../src/orchestrator.js');
+    vi.mocked(orchestrateGoal).mockImplementation(async (opts) => {
+      orchestrateCalls.push(opts.goal.title);
+      return new Promise<void>((r) => orchestrateResolvers.push(r));
+    });
+
     const logger = initLogger({ level: 'silent', pretty: false });
-    const config = mkConfig();
+    const config = { ...mkConfig(), goalsReloadDebounceMs: 0 };
 
     const daemonPromise = runDaemon(config, logger);
 
-    for (let i = 0; i < 50 && !changeHandler; i++) {
-      await new Promise((r) => setTimeout(r, 20));
-    }
-    expect(changeHandler).toBeDefined();
-    expect(chokidarWatch).toHaveBeenCalledWith(
-      join(workspace, '.gsd', 'goals-updated'),
-      expect.objectContaining({ ignoreInitial: true }),
+    // Wait for daemon to set up watcher and start processing first goal
+    await new Promise((r) => setTimeout(r, 100));
+
+    writeFileSync(
+      goalsPath,
+      '## Pending\n- [ ] First goal\n- [ ] Second goal\n\n## In Progress\n\n## Done\n',
+      'utf-8',
     );
+    // Touch .gsd/goals-updated to trigger real chokidar change event
+    writeFileSync(join(workspace, '.gsd', 'goals-updated'), `updated:${Date.now()}\n`, 'utf-8');
+    // With goalsReloadDebounceMs: 0, handler schedules setImmediate(doReload).
+    // Allow chokidar to fire and doReload to complete.
+    await new Promise((r) => setTimeout(r, 200));
 
     orchestrateResolvers[0]?.();
+    for (let i = 0; i < 100 && orchestrateResolvers.length < 2; i++) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(orchestrateCalls).toContain('First goal');
+    expect(orchestrateCalls).toContain('Second goal');
+
+    orchestrateResolvers.forEach((r) => r());
     await daemonPromise;
   });
 
@@ -148,9 +155,9 @@ describe('daemon goals reload', () => {
     const daemonPromise = runDaemon(config, logger);
     await new Promise((r) => setTimeout(r, 100));
 
-    // While first goal is running, emit change with same content — addToQueue should skip (running.has)
-    changeHandler!();
-    await new Promise((r) => setTimeout(r, 150));
+    // While first goal is running, touch .gsd/goals-updated — addToQueue should skip (running.has)
+    writeFileSync(join(workspace, '.gsd', 'goals-updated'), `updated:${Date.now()}\n`, 'utf-8');
+    await new Promise((r) => setTimeout(r, 600));
 
     // orchestrateGoal should be called exactly once; change handler ran but did not re-queue
     expect(orchestrateCalls).toEqual(['First goal']);
