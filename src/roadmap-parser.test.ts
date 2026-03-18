@@ -62,9 +62,11 @@ describe('roadmap-parser', () => {
         err = e as Error;
       }
       expect(err).not.toBeNull();
-      expect(err!.message).toMatch(/Ambiguous phase prefix "04-"/);
+      expect(err!.message).toMatch(/Ambiguous phase directory/);
+      expect(err!.message).toMatch(/prefix '04-'/);
       expect(err!.message).toMatch(/04-foo/);
       expect(err!.message).toMatch(/04-bar/);
+      expect(err!.message).toMatch(/Remove the duplicate from .planning\/phases/);
     });
 
     it('discoverPlans marks executed when SUMMARY exists', async () => {

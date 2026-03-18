@@ -83,8 +83,8 @@ export function findPhaseDir(phasesRoot: string, phaseNumber: number): string | 
   const matches = entries.filter((name) => name.startsWith(prefix));
   if (matches.length > 1) {
     throw new Error(
-      `Ambiguous phase prefix "${prefix}": multiple directories match (${matches.join(', ')}). ` +
-        'Remove or rename duplicate phase directories so only one matches.',
+      `Ambiguous phase directory: multiple dirs match prefix '${prefix}': ${matches.join(', ')}. ` +
+        `Remove the duplicate from .planning/phases/.`,
     );
   }
   return matches.length === 1 ? join(phasesRoot, matches[0]) : null;
