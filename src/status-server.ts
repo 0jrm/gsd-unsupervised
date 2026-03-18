@@ -4,7 +4,7 @@ import http from 'node:http';
 import express, { type Request, type Response } from 'express';
 import { appendPendingGoal } from './goals.js';
 import twilio from 'twilio';
-import { normalizeSmsInput } from './intake/normalizer.js';
+import { normalizeDashboardInput, normalizeSmsInput } from './intake/normalizer.js';
 import { classifyGoal } from './intake/classifier.js';
 import { clarifyGoal, readPendingGoals, resolvePendingGoal, writePendingGoal } from './intake/clarifier.js';
 import { queueGoal } from './intake/goals-writer.js';
@@ -229,6 +229,16 @@ function getDashboardHtml(): string {
       </div>
       <p class="error-msg" id="config-error" style="display:none"></p>
     </section>
+    <section id="intake" style="margin-top:2rem">
+      <h2 style="font-size:1rem;font-weight:500;margin-bottom:.75rem">Add goal</h2>
+      <input id="goal-title" type="text" placeholder="What do you want to build?"
+             style="width:100%;padding:.5rem;margin-bottom:.5rem;font-size:.875rem">
+      <textarea id="goal-body" placeholder="Details (optional)" rows="2"
+                style="width:100%;padding:.5rem;margin-bottom:.5rem;font-size:.875rem"></textarea>
+      <button id="goal-submit" onclick="submitGoal()"
+              style="padding:.5rem 1rem;font-size:.875rem">Add goal</button>
+      <div id="goal-feedback" style="margin-top:.75rem;font-size:.875rem"></div>
+    </section>
   </div>
   <script>
     const API = '/api/status';
@@ -316,6 +326,73 @@ function getDashboardHtml(): string {
         errEl.style.display = 'block';
       });
     });
+
+    async function confirmPendingGoal(id) {
+      const feedback = document.getElementById('goal-feedback');
+      try {
+        const res = await fetch('/api/goals/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, confirmed: true }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (data.status === 'queued') {
+          feedback.textContent = 'Queued ✓';
+          return;
+        }
+        feedback.textContent = 'Confirm failed (status=' + (data.status || 'unknown') + ')';
+      } catch (e) {
+        feedback.textContent = 'Confirm failed: ' + (e && e.message ? e.message : String(e));
+      }
+    }
+
+    async function submitGoal() {
+      const feedback = document.getElementById('goal-feedback');
+      feedback.textContent = '';
+      const titleEl = document.getElementById('goal-title');
+      const bodyEl = document.getElementById('goal-body');
+      const title = (titleEl && titleEl.value ? titleEl.value : '').trim();
+      const body = (bodyEl && bodyEl.value ? bodyEl.value : '').trim();
+      if (!title) {
+        feedback.textContent = 'Please enter a goal title.';
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/goals/intake', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, body }),
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (data.status === 'queued') {
+          feedback.textContent = 'Queued ✓';
+          return;
+        }
+        if (data.status === 'pending') {
+          const questions = (data.questions || []).map(function(q) {
+            return '<li>' + escapeHtml(String(q)) + '</li>';
+          }).join('');
+          feedback.innerHTML =
+            '<div style="margin-top:.25rem">' +
+            '<div style="font-weight:600;margin-bottom:.25rem">Draft spec</div>' +
+            '<pre style="margin:0;white-space:pre-wrap;line-height:1.35;background:rgba(0,0,0,.15);padding:.5rem;border-radius:6px">' +
+              escapeHtml(String(data.draftSpec || '')) +
+            '</pre>' +
+            (questions ? ('<div style="font-weight:600;margin-top:.5rem;margin-bottom:.25rem">Questions</div><ul style="margin:0 0 0 1rem;padding:0">' + questions + '</ul>') : '') +
+            '<button type="button" style="margin-top:.75rem;padding:.5rem 1rem;font-size:.875rem" onclick=\'confirmPendingGoal(' +
+              JSON.stringify(data.id) +
+              ')\'>Confirm ✓</button>' +
+            '</div>';
+          return;
+        }
+
+        feedback.textContent = 'Unexpected response (status=' + (data.status || 'unknown') + ')';
+      } catch (e) {
+        feedback.textContent = 'Request failed: ' + (e && e.message ? e.message : String(e));
+      }
+    }
 
     fetchStatus();
     fetchConfig();
@@ -456,6 +533,93 @@ function registerSmsWebhookRoutes(
   );
 }
 
+function registerDashboardIntakeRoutes(app: import('express').Express, webhookOptions: WebhookOptions): void {
+  app.post('/api/goals/intake', async (req: Request, res: Response) => {
+    const workspaceRoot = webhookOptions.workspaceRoot;
+    const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+    const body = typeof req.body?.body === 'string' ? req.body.body : undefined;
+
+    if (!title) {
+      res.status(400).json({ status: 'bad_request', error: 'Missing title' });
+      return;
+    }
+
+    const rawGoal = normalizeDashboardInput({ title, body }, workspaceRoot);
+    const complexity = await classifyGoal(rawGoal);
+
+    if (complexity.score <= 2) {
+      await queueGoal({
+        workspaceRoot,
+        title: rawGoal.title,
+        successCriteria: [],
+        replyTo: rawGoal.replyTo,
+      });
+      res.json({ status: 'queued', title: rawGoal.title });
+      return;
+    }
+
+    const before = await readPendingGoals(workspaceRoot);
+    const action = await clarifyGoal(rawGoal, complexity, workspaceRoot);
+    const after = await readPendingGoals(workspaceRoot);
+
+    const newPending = after[after.length - 1];
+    const id = newPending?.id ?? 'pending';
+
+    if (action.action !== 'pending') {
+      res.json({ status: 'queued', title: rawGoal.title });
+      return;
+    }
+
+    res.json({
+      status: 'pending',
+      id,
+      draftSpec: action.draftSpec,
+      questions: action.questions,
+      beforeCount: before.length,
+    });
+  });
+
+  app.post('/api/goals/confirm', async (req: Request, res: Response) => {
+    const workspaceRoot = webhookOptions.workspaceRoot;
+    const id = typeof req.body?.id === 'string' ? req.body.id.trim() : '';
+    if (!id) {
+      res.status(400).json({ status: 'bad_request', error: 'Missing id' });
+      return;
+    }
+
+    const confirmed = Boolean(req.body?.confirmed);
+    const editedSpec = typeof req.body?.editedSpec === 'string' ? req.body.editedSpec : undefined;
+
+    const pending = (await readPendingGoals(workspaceRoot)).find((p) => p.id === id);
+    if (!pending) {
+      res.status(404).json({ status: 'not_found' });
+      return;
+    }
+
+    if (confirmed) {
+      await resolvePendingGoal(workspaceRoot, id);
+      await queueGoal({
+        workspaceRoot,
+        title: pending.raw.title,
+        successCriteria: [],
+        replyTo: pending.raw.replyTo,
+      });
+      res.json({ status: 'queued' });
+      return;
+    }
+
+    if (editedSpec != null) {
+      const updated: PendingGoal = { ...pending, draftSpec: editedSpec };
+      await resolvePendingGoal(workspaceRoot, id);
+      await writePendingGoal(workspaceRoot, updated);
+      res.json({ status: 'pending', draftSpec: updated.draftSpec });
+      return;
+    }
+
+    res.status(400).json({ status: 'bad_request', error: 'Expected confirmed=true or editedSpec' });
+  });
+}
+
 /**
  * Express app factory used by supertest-based webhook tests.
  * - Does not call `app.listen`.
@@ -466,8 +630,10 @@ export function createStatusApp(
   options?: StatusServerOptions,
 ): import('express').Express {
   const app = express();
+  app.use(express.json());
   if (options?.webhook) {
     registerSmsWebhookRoutes(app, options.webhook, options.logger);
+    registerDashboardIntakeRoutes(app, options.webhook);
   }
   return app;
 }
@@ -614,6 +780,7 @@ export async function createStatusServer(
     });
 
     registerSmsWebhookRoutes(app, wh, options.logger);
+    registerDashboardIntakeRoutes(app, wh);
   }
 
   /** Dashboard at GET / when rich options provided; legacy JSON at GET /status. */
