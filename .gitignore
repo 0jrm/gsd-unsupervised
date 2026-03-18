@@ -6,3 +6,4 @@ session-log.jsonl
 .env
 .gsd/
 logs/
+goals.md
