@@ -1,6 +1,85 @@
 #!/usr/bin/env bash
-# Run the daemon with dashboard + ngrok (recommended). Requires CURSOR_API_KEY in env or .env.
+# ./run — single entry point for gsd-unsupervised
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$ROOT"
-exec ./bin/gsd-unsupervised --goals goals.md --status-server 4173 --ngrok --verbose "$@"
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+STATE="$ROOT/.gsd/state.json"
+ENV="$ROOT/.env"
+
+# Load env (no spaces in values)
+if [ -f "$ENV" ]; then
+  export $(grep -v '^#' "$ENV" | xargs) 2>/dev/null || true
+fi
+
+# First run?
+if [ ! -f "$STATE" ]; then
+  echo "No state found. Run: npx gsd-unsupervised init"
+  exit 1
+fi
+
+# Read state (node for JSON)
+MODE="$(node -e "const s=require('$STATE'); console.log(s.mode || 'self')")"
+PORT="$(node -e "const s=require('$STATE'); console.log(s.statusServerPort || 3000)")"
+GOALS="$(node -e "const s=require('$STATE'); console.log(s.goalsPath || './goals.md')")"
+
+echo ""
+echo "Resuming gsd-unsupervised ($MODE mode)"
+echo "Goals: $GOALS"
+echo ""
+
+# Kill stale tmux session
+SESSION="gsd-$MODE"
+tmux kill-session -t "$SESSION" 2>/dev/null || true
+
+mkdir -p "$ROOT/logs"
+
+# Build so dist/cli.js exists when running from this repo
+if [ -f "$ROOT/package.json" ]; then
+  (cd "$ROOT" && npm run build 2>/dev/null) || true
+fi
+
+# Start daemon (run command reads state and uses workspaceRoot/goals from it).
+# Source .env in this shell so TWILIO_* etc. are set for the daemon (Node dotenv also loads from cwd).
+tmux new-session -d -s "$SESSION" -n daemon \
+  "cd '$ROOT' && ( set -a; [ -f .env ] && . ./.env; set +a ) && npx gsd-unsupervised run --state '$STATE' --verbose 2>&1 | tee logs/orchestrator.log; echo '--- EXITED ---'; read"
+
+# Start ngrok if configured (check state or .gsd/config.json)
+USE_NGROK=false
+if command -v ngrok &>/dev/null; then
+  if node -e "require('$STATE').ngrokUrl !== undefined" 2>/dev/null; then
+    USE_NGROK=true
+  fi
+  if [ -f "$ROOT/.gsd/config.json" ]; then
+    if node -e "const c=require('$ROOT/.gsd/config.json'); process.exit(c.useNgrok ? 0 : 1)" 2>/dev/null; then
+      USE_NGROK=true
+    fi
+  fi
+fi
+
+if [ "$USE_NGROK" = true ]; then
+  tmux new-window -t "$SESSION" -n ngrok \
+    "ngrok http $PORT --log stdout 2>&1 | tee logs/ngrok.log; read"
+  sleep 3
+  URL=""
+  if command -v curl &>/dev/null; then
+    URL="$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | grep -o '"public_url":"https://[^"]*"' | head -1 | cut -d'"' -f4)"
+  fi
+  if [ -n "$URL" ]; then
+    node -e "
+      const fs = require('fs');
+      const p = '$STATE';
+      const s = JSON.parse(fs.readFileSync(p, 'utf-8'));
+      s.ngrokUrl = '$URL';
+      fs.writeFileSync(p, JSON.stringify(s, null, 2));
+    "
+    echo "Dashboard: $URL"
+  fi
+fi
+
+# Log tail window + shell
+tmux new-window -t "$SESSION" -n logs "tail -f '$ROOT/logs/orchestrator.log'; read"
+tmux new-window -t "$SESSION" -n shell "cd '$ROOT' && exec bash"
+
+echo "Session: tmux attach -t $SESSION"
+echo ""
+tmux attach -t "$SESSION"

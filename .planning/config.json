@@ -24,6 +24,8 @@
     "always_confirm_external_services": false
   },
   "autoCheckpoint": true,
-  "maxCpuFraction": 0.75,
+  "maxCpuFraction": 0.8,
+  "maxMemoryFraction": 0.8,
+  "maxGpuFraction": 0.8,
   "maxConcurrent": 2
 }

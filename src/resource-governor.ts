@@ -1,4 +1,8 @@
 import os from 'node:os';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileP = promisify(execFile);
 
 export interface LoadInfo {
   load1: number;
@@ -18,19 +22,29 @@ export interface LoadInfo {
   memoryFraction: number;
   totalMemBytes: number;
   freeMemBytes: number;
+  /**
+   * Best-effort GPU utilization fraction (0–1). Only set when nvidia-smi is
+   * available and returns utilization; otherwise undefined.
+   */
+  gpuFraction?: number;
 }
 
 export interface WaitForHeadroomOptions {
   /**
    * Maximum allowed CPU fraction before new agent work is allowed to start.
-   * 1.0 means 100% of all logical CPUs; 0.75 (default) means ~75% of total.
+   * 1.0 means 100% of all logical CPUs; 0.8 recommended for parallel work.
    */
   maxCpuFraction: number;
   /**
    * Maximum allowed memory fraction before new agent work is allowed to start.
-   * 1.0 means 100% of total RAM; 0.9 (default) means ~90%.
+   * 1.0 means 100% of total RAM; 0.8 recommended for parallel work.
    */
   maxMemoryFraction?: number;
+  /**
+   * Maximum allowed GPU utilization fraction (0–1). Only checked when
+   * nvidia-smi is available. 0.8 recommended for parallel work.
+   */
+  maxGpuFraction?: number;
   /**
    * Minimum delay between load checks while waiting for headroom.
    * Defaults to 2s to avoid busy-waiting.
@@ -48,10 +62,30 @@ export interface WaitForHeadroomOptions {
   logger?: { debug: (obj: unknown, msg?: string) => void; warn: (obj: unknown, msg?: string) => void };
 }
 
+/**
+ * Best-effort GPU utilization fraction (0–1) via nvidia-smi. Returns undefined
+ * if nvidia-smi is not available or parsing fails.
+ */
+export async function getGpuFraction(): Promise<number | undefined> {
+  try {
+    const { stdout } = await execFileP('nvidia-smi', ['--query-gpu=utilization.gpu', '--format=csv,noheader,nounits'], {
+      timeout: 5000,
+      encoding: 'utf-8',
+    });
+    const line = stdout.trim().split('\n')[0];
+    const pct = line ? parseInt(line.trim(), 10) : NaN;
+    if (Number.isFinite(pct) && pct >= 0 && pct <= 100) return pct / 100;
+  } catch {
+    // nvidia-smi not installed or failed
+  }
+  return undefined;
+}
+
 export function currentLoadInfo(
   maxCpuFraction?: number,
   maxMemoryFraction?: number,
-): LoadInfo & { maxCpuFraction?: number; maxMemoryFraction?: number } {
+  gpuFraction?: number,
+): LoadInfo & { maxCpuFraction?: number; maxMemoryFraction?: number; maxGpuFraction?: number } {
   const [load1, load5, load15] = os.loadavg();
   const cpuCount = Math.max(os.cpus()?.length ?? 1, 1);
   const cpuFraction = cpuCount > 0 ? load1 / cpuCount : 0;
@@ -68,15 +102,32 @@ export function currentLoadInfo(
     memoryFraction,
     totalMemBytes,
     freeMemBytes,
+    gpuFraction,
     maxCpuFraction,
     maxMemoryFraction,
   };
+}
+
+/** Like currentLoadInfo but async; fetches GPU utilization when maxGpuFraction is set. */
+export async function currentLoadInfoAsync(options: {
+  maxCpuFraction?: number;
+  maxMemoryFraction?: number;
+  maxGpuFraction?: number;
+}): Promise<LoadInfo & { maxCpuFraction?: number; maxMemoryFraction?: number; maxGpuFraction?: number }> {
+  const gpuFraction = options.maxGpuFraction != null ? await getGpuFraction() : undefined;
+  const info = currentLoadInfo(
+    options.maxCpuFraction,
+    options.maxMemoryFraction,
+    gpuFraction,
+  );
+  return { ...info, maxGpuFraction: options.maxGpuFraction };
 }
 
 export async function waitForHeadroom(options: WaitForHeadroomOptions): Promise<void> {
   const {
     maxCpuFraction,
     maxMemoryFraction,
+    maxGpuFraction,
     pollIntervalMs = 2000,
     maxWaitMs = 120_000,
     logger,
@@ -87,11 +138,12 @@ export async function waitForHeadroom(options: WaitForHeadroomOptions): Promise<
   const validCpu = maxCpuFraction !== undefined && maxCpuFraction > 0 && maxCpuFraction < 1;
   const validMem =
     maxMemoryFraction !== undefined && maxMemoryFraction > 0 && maxMemoryFraction < 1;
+  const validGpu =
+    maxGpuFraction !== undefined && maxGpuFraction > 0 && maxGpuFraction < 1;
 
-  if (!validCpu && !validMem) {
-    // Misconfiguration — do not block orchestration, just log once and return.
+  if (!validCpu && !validMem && !validGpu) {
     logger?.warn(
-      { maxCpuFraction, maxMemoryFraction },
+      { maxCpuFraction, maxMemoryFraction, maxGpuFraction },
       'resource-governor: invalid thresholds, skipping headroom check',
     );
     return;
@@ -99,15 +151,24 @@ export async function waitForHeadroom(options: WaitForHeadroomOptions): Promise<
 
   const start = Date.now();
 
-  // First, allow a cheap fast-path so we don't sleep when there's plenty of headroom.
-  let info = currentLoadInfo(maxCpuFraction, maxMemoryFraction);
+  async function getInfo(): Promise<LoadInfo & { maxCpuFraction?: number; maxMemoryFraction?: number; maxGpuFraction?: number }> {
+    const gpuFraction = validGpu ? await getGpuFraction() : undefined;
+    const info = currentLoadInfo(maxCpuFraction, maxMemoryFraction, gpuFraction);
+    return { ...info, maxGpuFraction };
+  }
+
+  let info = await getInfo();
   const withinCpu = !validCpu || info.cpuFraction <= (maxCpuFraction as number);
   const withinMem =
     !validMem || info.memoryFraction <= (maxMemoryFraction as number);
-  if (withinCpu && withinMem) {
+  const withinGpu =
+    !validGpu ||
+    info.gpuFraction == null ||
+    info.gpuFraction <= (maxGpuFraction as number);
+  if (withinCpu && withinMem && withinGpu) {
     logger?.debug(
       { load: info },
-      'resource-governor: sufficient CPU headroom, proceeding immediately',
+      'resource-governor: sufficient headroom, proceeding immediately',
     );
     return;
   }
@@ -117,10 +178,10 @@ export async function waitForHeadroom(options: WaitForHeadroomOptions): Promise<
     'resource-governor: high system load detected, waiting for headroom',
   );
 
-  // Slow-path: periodically poll until below threshold or timeout expires.
   while (
     (!validCpu || info.cpuFraction > (maxCpuFraction as number)) ||
-    (!validMem || info.memoryFraction > (maxMemoryFraction as number))
+    (!validMem || info.memoryFraction > (maxMemoryFraction as number)) ||
+    (validGpu && info.gpuFraction != null && info.gpuFraction > (maxGpuFraction as number))
   ) {
     const elapsed = Date.now() - start;
     if (elapsed >= maxWaitMs) {
@@ -134,12 +195,12 @@ export async function waitForHeadroom(options: WaitForHeadroomOptions): Promise<
     const remainingMs = maxWaitMs - elapsed;
     const delayMs = Math.min(pollIntervalMs, remainingMs);
     await new Promise((resolve) => setTimeout(resolve, delayMs));
-    info = currentLoadInfo(maxCpuFraction, maxMemoryFraction);
+    info = await getInfo();
   }
 
   logger?.debug(
     { load: info, waitedMs: Date.now() - start },
-    'resource-governor: CPU headroom restored, resuming work',
+    'resource-governor: headroom restored, resuming work',
   );
 }
 

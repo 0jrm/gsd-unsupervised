@@ -7,12 +7,29 @@
   "bin": {
     "gsd-unsupervised": "bin/gsd-unsupervised"
   },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0jrm/gsd-unsupervised.git"
+  },
+  "keywords": [
+    "cursor",
+    "gsd",
+    "autopilot",
+    "agent",
+    "orchestrator",
+    "automation"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node dist/cli.js",
     "dev": "tsc --watch",
     "test": "vitest run --reporter verbose",
-    "test:integration": "vitest run tests/"
+    "test:integration": "vitest run tests/",
+    "test:sms": "node dist/cli.js test-sms"
   },
   "engines": {
     "node": ">=18"

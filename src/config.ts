@@ -11,14 +11,18 @@ export const AutopilotConfigSchema = z.object({
   maxConcurrent: z.number().int().min(1).max(10).default(3),
   /**
    * Upper bound on allowed CPU usage before new agent work waits.
-   * Expressed as a fraction of total CPU capacity (1.0 = 100% of all cores).
+   * Expressed as a fraction of total CPU capacity (1.0 = 100%). 0.8 = 80% recommended for parallel.
    */
-  maxCpuFraction: z.number().min(0.1).max(1).default(0.75),
+  maxCpuFraction: z.number().min(0.1).max(1).default(0.8),
   /**
    * Upper bound on allowed memory usage before new agent work waits.
-   * Expressed as a fraction of total system memory (1.0 = 100% of RAM).
+   * Expressed as a fraction of total system memory (1.0 = 100%). 0.8 = 80% recommended for parallel.
    */
-  maxMemoryFraction: z.number().min(0.5).max(1).default(0.9),
+  maxMemoryFraction: z.number().min(0.5).max(1).default(0.8),
+  /**
+   * Upper bound on GPU utilization (0–1) when nvidia-smi is available. 0.8 = 80% recommended for parallel.
+   */
+  maxGpuFraction: z.number().min(0.1).max(1).optional(),
   verbose: z.boolean().default(false),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   workspaceRoot: z.string().default(process.cwd()),
@@ -36,6 +40,8 @@ export const AutopilotConfigSchema = z.object({
   statusServerPort: z.number().int().min(1).max(65535).optional(),
   /** When true and statusServerPort is set, spawn `ngrok http <port>` for the duration of the daemon. */
   ngrok: z.boolean().default(false),
+  /** When set, daemon writes PID, progress, lastHeartbeat to this state file (.gsd/state.json). */
+  statePath: z.string().optional(),
 });
 
 export type AutopilotConfig = z.infer<typeof AutopilotConfigSchema>;
@@ -103,6 +109,9 @@ function readPlanningOverrides(workspaceRoot: string): Partial<AutopilotConfig> 
     }
     if (typeof parsed.maxMemoryFraction === 'number') {
       overrides.maxMemoryFraction = parsed.maxMemoryFraction;
+    }
+    if (typeof parsed.maxGpuFraction === 'number') {
+      overrides.maxGpuFraction = parsed.maxGpuFraction;
     }
     return overrides;
   } catch {

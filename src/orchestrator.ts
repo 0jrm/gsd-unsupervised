@@ -191,6 +191,7 @@ export async function orchestrateGoal(options: {
     await waitForHeadroom({
       maxCpuFraction: config.maxCpuFraction,
       maxMemoryFraction: config.maxMemoryFraction,
+      maxGpuFraction: config.maxGpuFraction,
       logger,
     });
   }

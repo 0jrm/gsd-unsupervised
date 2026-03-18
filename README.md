@@ -35,6 +35,16 @@ When `clip.exe` cannot be resolved (for example, on non-WSL Linux), clipboard in
 
 ## Install
 
+From npm (recommended):
+
+```bash
+npm install -g gsd-unsupervised
+# or
+npx gsd-unsupervised init
+```
+
+From source:
+
 ```bash
 git clone <repo-url>
 cd gsd-unsupervised
@@ -56,13 +66,28 @@ bash setup.sh --validate    # Bootstrap + validation checks + orchestrator smoke
 
 ## Usage
 
+### Two modes
+
+- **SELF** — Daemon improves this repo (`gsd-unsupervised`). Workspace and goals live here; state in `.gsd/state.json`.
+- **PROJECT** — Daemon works on another repo. You run `npx gsd-unsupervised init` in that repo; state and goals live under that repo’s `.gsd/`.
+
+### First-time setup (any repo)
+
+```bash
+npx gsd-unsupervised init
+```
+
+Prompts: project name, repo path, first goal, Twilio SMS (y/n), public dashboard via ngrok (y/n). Writes `.gsd/state.json`, goals, and optional `.env`. Then start with `./run`.
+
 ### Recommended (dashboard + public URL)
 
-From the project root you can use the **`run`** script (same as the long command below):
+From the project root you can use the **`run`** script (reads `.gsd/state.json`, loads `.env`, starts daemon + optional ngrok + tmux):
 
 ```bash
 ./run
 ```
+
+If there is no `.gsd/state.json`, run `npx gsd-unsupervised init` first.
 
 Or run the daemon explicitly with the status server and ngrok:
 
@@ -215,7 +240,13 @@ Resume uses this to re-run `execute-plan` for phase 2 plan 1 only, then continue
 
 **Status server and dashboard:** Use `--status-server <port>` to enable the local HTTP status server (e.g. `./bin/gsd-unsupervised --goals goals.md --status-server 4173`). Add `--ngrok` to have the daemon run `ngrok http <port>` for the same lifecycle: the public URL appears in ngrok’s output and the tunnel is closed when the daemon exits. `GET /` serves the HTML dashboard; `GET /status` returns legacy JSON; `GET /api/status` returns rich JSON including `stateSnapshot`, session log window, git feed, and `systemLoad`. `GET /api/config` and `POST /api/config` expose and update `.planning/config.json` (used for the sequential/parallel toggle).
 
-**SMS (Twilio):** Optional. Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, and `TWILIO_TO` to receive SMS on goal complete, goal failed, and daemon paused (after 3 retries). If any are unset, SMS is skipped and the daemon runs normally.
+**Hot-reload and webhook:** The daemon watches `goals.md` and merges new pending goals into the queue when the file changes. With the status server running: **POST /api/goals** (JSON `{ "title": "...", "priority": 1 }`) appends to goals and enqueues; **POST /api/todos** (JSON `{ "title": "...", "area": "api" }`) creates `.planning/todos/pending/`; **POST /webhook/twilio** accepts inbound SMS (e.g. `add <goal>` or `todo <task>`) and replies with TwiML. Point your Twilio number webhook at `<ngrok-url>/webhook/twilio`.
+
+**Parallel goal pool:** With `--parallel`, a worker pool of size `--max-concurrent` is used; a per-workspace mutex keeps one goal running at a time for a single workspace (phase-level parallel inside execute-phase still applies).
+
+**SMS (Twilio):** Optional. Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, and `TWILIO_TO` to receive SMS on goal complete, goal failed, and daemon paused (after 3 retries). If any are unset, SMS is skipped and the daemon runs normally. To verify delivery, run `npx gsd-unsupervised test-sms` from the project root (after `npm run build`).
+
+**State and heartbeat:** When started via `./run` or `gsd-unsupervised run --state .gsd/state.json`, the daemon writes to `.gsd/state.json` (PID, current goal, progress, `lastHeartbeat`). You can use `lastHeartbeat` in an external cron or script to send a periodic "alive" SMS (e.g. every 30 min) or alert if the heartbeat is stale (e.g. >10 min).
 
 ## Development
 

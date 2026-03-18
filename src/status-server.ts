@@ -1,10 +1,19 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import express, { type Request, type Response } from 'express';
+import { appendPendingGoal } from './goals.js';
+
+function escapeTwiML(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 import { readStateMd } from './state-parser.js';
 import { readSessionLog } from './session-log.js';
 import { getRecentCommits } from './git.js';
-import { currentLoadInfo } from './resource-governor.js';
+import { currentLoadInfo, currentLoadInfoAsync } from './resource-governor.js';
 
 /** Schema for .planning/config.json parallelization slice (exposed via /api/config). */
 export interface PlanningConfig {
@@ -71,7 +80,20 @@ export interface DashboardStatusPayload {
   systemLoad?: import('./resource-governor.js').LoadInfo & {
     maxCpuFraction?: number;
     maxMemoryFraction?: number;
+    maxGpuFraction?: number;
   };
+}
+
+/** Optional webhook: add goals/todos via API or Twilio inbound. */
+export interface WebhookOptions {
+  goalsPath: string;
+  workspaceRoot: string;
+  /** Callback when a goal is added (persisted to goals.md by route). */
+  onQueueGoal: (goal: import('./goals.js').Goal) => void;
+  /** Titles of goals currently being executed (for dedup on reload). */
+  getRunningTitles: () => string[];
+  /** Create a todo file; returns path. */
+  addTodo: (title: string, area?: string) => Promise<string>;
 }
 
 export interface StatusServerOptions {
@@ -84,6 +106,8 @@ export interface StatusServerOptions {
   sessionLogLimit?: number;
   /** Max git commits in feed (default 10). */
   gitFeedLimit?: number;
+  /** When set, enables POST /api/goals, POST /api/todos, POST /webhook/twilio. */
+  webhook?: WebhookOptions;
 }
 
 const DEFAULT_PLANNING_CONFIG: PlanningConfig = {
@@ -277,8 +301,10 @@ export function createStatusServer(
   const gitFeedLimit = options?.gitFeedLimit ?? 10;
   const planningConfigPath = options?.planningConfigPath;
 
+  app.use(express.json());
+  app.use(express.urlencoded({ extended: true }));
+
   if (planningConfigPath) {
-    app.use(express.json());
     app.get('/api/config', async (_req: Request, res: Response) => {
       try {
         const config = await readPlanningConfig(planningConfigPath);
@@ -319,6 +345,86 @@ export function createStatusServer(
     });
   }
 
+  if (options?.webhook) {
+    const wh = options.webhook;
+    app.post('/api/goals', async (req: Request, res: Response) => {
+      try {
+        const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+        if (!title) {
+          res.status(400).json({ error: 'Missing or invalid title' });
+          return;
+        }
+        const priority =
+          typeof req.body.priority === 'number' && Number.isFinite(req.body.priority)
+            ? req.body.priority
+            : undefined;
+        await appendPendingGoal(wh.goalsPath, title, priority);
+        const goal = {
+          title,
+          status: 'pending' as const,
+          raw: `- [ ] ${title}${priority != null ? ` [priority:${priority}]` : ''}`,
+          priority,
+        };
+        wh.onQueueGoal(goal);
+        res.json({ ok: true, title });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+    app.post('/api/todos', async (req: Request, res: Response) => {
+      try {
+        const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+        if (!title) {
+          res.status(400).json({ error: 'Missing or invalid title' });
+          return;
+        }
+        const area = typeof req.body.area === 'string' ? req.body.area.trim() || 'general' : 'general';
+        const filePath = await wh.addTodo(title, area);
+        res.json({ ok: true, title, path: filePath });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+    app.post('/webhook/twilio', async (req: Request, res: Response) => {
+      const body = typeof req.body?.Body === 'string' ? req.body.Body.trim() : '';
+      const lower = body.toLowerCase();
+      let reply = '';
+      try {
+        if (lower.startsWith('add ') || lower.startsWith('goal ')) {
+          const title = body.slice(body.toLowerCase().indexOf(' ') + 1).trim();
+          if (title) {
+            await appendPendingGoal(wh.goalsPath, title);
+            const goal = {
+              title,
+              status: 'pending' as const,
+              raw: `- [ ] ${title}`,
+            };
+            wh.onQueueGoal(goal);
+            reply = `Added goal: ${title}`;
+          } else {
+            reply = 'Usage: add <goal title> or goal <goal title>';
+          }
+        } else if (lower.startsWith('todo ')) {
+          const title = body.slice(5).trim();
+          if (title) {
+            await wh.addTodo(title);
+            reply = `Added todo: ${title}`;
+          } else {
+            reply = 'Usage: todo <task description>';
+          }
+        } else {
+          reply =
+            'Send: add <goal> | goal <goal> | todo <task>. Example: add Complete Phase 4';
+        }
+      } catch (err) {
+        reply = `Error: ${String(err)}`;
+      }
+      res.type('text/xml').send(
+        `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escapeTwiML(reply)}</Message></Response>`,
+      );
+    });
+  }
+
   /** Dashboard at GET / when rich options provided; legacy JSON at GET /status. */
   if (options) {
     app.get('/', (_req: Request, res: Response) => {
@@ -336,11 +442,28 @@ export function createStatusServer(
   /** Dashboard API: rich payload. */
   app.get('/api/status', async (_req: Request, res: Response) => {
     const legacy = getStatus();
+    let systemLoad: DashboardStatusPayload['systemLoad'] = currentLoadInfo();
+    if (options?.planningConfigPath) {
+      try {
+        const raw = await readFile(options.planningConfigPath, 'utf-8');
+        const planning = JSON.parse(raw) as Record<string, unknown>;
+        const maxCpu = typeof planning.maxCpuFraction === 'number' ? planning.maxCpuFraction : 0.8;
+        const maxMem = typeof planning.maxMemoryFraction === 'number' ? planning.maxMemoryFraction : 0.8;
+        const maxGpu = typeof planning.maxGpuFraction === 'number' ? planning.maxGpuFraction : undefined;
+        systemLoad = await currentLoadInfoAsync({
+          maxCpuFraction: maxCpu,
+          maxMemoryFraction: maxMem,
+          maxGpuFraction: maxGpu,
+        });
+      } catch {
+        // keep sync load info
+      }
+    }
     const payload: DashboardStatusPayload = {
       ...legacy,
       tokens: {},
       cost: {},
-      systemLoad: currentLoadInfo(),
+      systemLoad,
     };
 
     if (options) {
