@@ -23,6 +23,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 5: Crash Detection & Recovery** — Session log, resume-from phase/plan, heartbeat
 - [ ] **Phase 6: Status Server** — HTTP status endpoint, daemon graceful shutdown
 - [ ] **Phase 7: WSL Bootstrap** — Setup script, path resolution (Cursor, clip.exe, WSL)
+- [ ] **Phase 8: CN (Continue CLI) Support** — Add `cn` as first-class agent alongside cursor; adapter, output parsing, GSD rules compatibility
 
 ## Phase Details
 
@@ -98,6 +99,17 @@ Plans:
 - [ ] 07-01: WSL path resolution and setup script
 - [ ] 07-02: WSL bootstrap diagnostics and documentation
 
+### Phase 8: CN (Continue CLI) Support
+**Goal**: Add `cn` (Continue's headless CLI) as a first-class supported agent alongside cursor. End-to-end working integration: adapter, plain-text output parsing, GSD rules via .continue/config.yaml, configurable binary path.
+**Depends on**: Phase 3 (Agent Integration)
+**Research**: Level 1 — Continue CLI docs confirm headless invocation, config format, rules loading
+**Plans**: 3 plans
+
+Plans:
+- [ ] 08-01: cn adapter core (runContinueCli, parseCnOutput, config)
+- [ ] 08-02: Agent registry, createAgentInvoker, GSD rules compatibility
+- [ ] 08-03: Tests and documentation
+
 ## Progress
 
 **Execution Order:**
@@ -112,3 +124,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 5. Crash Detection & Recovery | 2/2 | Complete | 2026-03-17 |
 | 6. Status Server | 1/1 | Complete | 2026-03-17 |
 | 7. WSL Bootstrap | 2/2 | Complete | 2026-03-17 |
+| 8. CN (Continue CLI) Support | 0/3 | Not started | — |
