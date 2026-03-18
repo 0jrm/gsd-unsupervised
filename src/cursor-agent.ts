@@ -1,17 +1,25 @@
 import path from 'node:path';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { writeFile, unlink } from 'node:fs/promises';
 import type { AgentInvoker, AgentResult } from './orchestrator.js';
 import type { Logger } from './logger.js';
-import { runAgentWithRetry, DEFAULT_RETRY_POLICY, type RetryPolicy } from './agent-runner.js';
+import {
+  runAgentWithRetry,
+  abortAgent,
+  DEFAULT_RETRY_POLICY,
+  type RetryPolicy,
+  type RunAgentResult,
+} from './agent-runner.js';
 import type { AgentId } from './agent-runner.js';
 import {
   appendSessionLog,
   type SessionLogEntry,
   type SessionLogContext,
 } from './session-log.js';
-import type { CursorStreamEvent } from './stream-events.js';
+import type { CursorStreamEvent, ResultEvent } from './stream-events.js';
 import type { AutopilotConfig } from './config.js';
-import { getCursorBinaryPath } from './config/paths.js';
+import { getCursorBinaryPath, getCnBinaryPath } from './config/paths.js';
+import { parseCnOutput } from './cn-output.js';
 
 export type { SessionLogContext };
 
@@ -210,6 +218,140 @@ export function validateCursorApiKey(): void {
       'Set CURSOR_API_KEY environment variable. Generate from Cursor Dashboard → Cloud Agents → User API Keys.',
     );
   }
+}
+
+export interface RunContinueCliOptions {
+  agentPath: string;
+  workspace: string;
+  prompt: string;
+  configPath?: string;
+  timeoutMs?: number;
+  env?: Record<string, string>;
+}
+
+/**
+ * Spawn cn (Continue CLI) in headless mode. cn outputs plain text, not NDJSON.
+ * Completion detection is via exit code. Returns RunAgentResult-compatible shape.
+ */
+export async function runContinueCli(options: RunContinueCliOptions): Promise<RunAgentResult> {
+  const { agentPath, workspace, prompt, configPath, timeoutMs, env } = options;
+
+  const args = [
+    '-p',
+    prompt,
+    '--allow',
+    'Write()',
+    '--allow',
+    'Bash()',
+    '--allow',
+    'Read()',
+  ];
+
+  if (configPath) {
+    args.unshift('--config', configPath);
+  }
+
+  return new Promise<RunAgentResult>((resolve, reject) => {
+    let child: ChildProcess;
+    try {
+      child = spawn(agentPath, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: workspace,
+        env: { ...process.env, ...env },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      reject(
+        new Error(
+          `cn binary not found. Install via: curl -fsSL https://raw.githubusercontent.com/continuedev/continue/main/extensions/cli/scripts/install.sh | bash, or npm. Set GSD_CN_BIN or continueCliPath if installed elsewhere. Original: ${msg}`,
+        ),
+      );
+      return;
+    }
+
+    const stdoutChunks: string[] = [];
+    const stderrChunks: string[] = [];
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    child.on('error', (err) => {
+      if (timer) clearTimeout(timer);
+      reject(
+        new Error(
+          `cn binary not found. Install via: curl -fsSL https://raw.githubusercontent.com/continuedev/continue/main/extensions/cli/scripts/install.sh | bash, or npm. Set GSD_CN_BIN or continueCliPath if installed elsewhere. Original: ${err.message}`,
+        ),
+      );
+    });
+
+    if (child.stdout) {
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdoutChunks.push(chunk.toString());
+      });
+    }
+    if (child.stderr) {
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderrChunks.push(chunk.toString());
+      });
+    }
+
+    if (timeoutMs != null && timeoutMs > 0) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        abortAgent(child).catch(() => {});
+      }, timeoutMs);
+    }
+
+    child.on('close', (code) => {
+      if (timer) clearTimeout(timer);
+
+      const stdout = stdoutChunks.join('');
+      const stderr = stderrChunks.join('');
+      const parsed = parseCnOutput(stdout);
+
+      let resultEvent: ResultEvent | null = null;
+      if (code === 0) {
+        resultEvent = {
+          type: 'result',
+          subtype: 'done',
+          duration_ms: 0,
+          duration_api_ms: 0,
+          is_error: false,
+          result: stdout,
+          session_id: '',
+        };
+      } else if (parsed.hasError || parsed.summary !== 'No output') {
+        resultEvent = {
+          type: 'result',
+          subtype: 'error',
+          duration_ms: 0,
+          duration_api_ms: 0,
+          is_error: true,
+          result: parsed.summary,
+          session_id: '',
+        };
+      }
+
+      if (timedOut) {
+        resolve({
+          sessionId: null,
+          resultEvent: null,
+          events: [],
+          exitCode: code,
+          timedOut: true,
+          stderr: stderr + (timeoutMs ? `\nAgent timed out after ${timeoutMs}ms` : ''),
+        });
+      } else {
+        resolve({
+          sessionId: null,
+          resultEvent,
+          events: [],
+          exitCode: code,
+          timedOut: false,
+          stderr,
+        });
+      }
+    });
+  });
 }
 
 /** Agent-agnostic factory: returns the appropriate invoker for the given agent ID. */
