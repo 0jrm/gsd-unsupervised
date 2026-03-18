@@ -33,6 +33,13 @@ export type NonInteractiveInitOptions = {
   ngrok?: boolean;
 };
 
+/** Simple init options (setup.sh-style): agent, goals path, port. */
+export type SimpleInitOptions = {
+  agent?: string;
+  goals?: string;
+  port?: number;
+};
+
 export async function runInit(options?: NonInteractiveInitOptions): Promise<void> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   console.log('\n  gsd-unsupervised init\n');
@@ -141,4 +148,54 @@ ${goalText}
   console.log('\n  ✓ Created .gsd/ config');
   console.log('  ✓ Created goals with your first goal');
   console.log('  ✓ Run: ./run to start\n');
+}
+
+/**
+ * Simple non-interactive init (setup.sh logic): writes .gsd/state.json and goals.md.
+ * Used when init is called with --agent, --goals, or --port flags.
+ */
+export async function runSimpleInit(options: SimpleInitOptions): Promise<void> {
+  const cwd = process.cwd();
+  const agent = options.agent ?? 'cursor';
+  const goalsPath = options.goals ?? './goals.md';
+  const port = options.port ?? 3000;
+
+  const gsdDir = resolve(cwd, '.gsd');
+  await mkdir(gsdDir, { recursive: true });
+
+  const state = {
+    mode: 'self' as GsdMode,
+    project: 'gsd-unsupervised',
+    agent,
+    goalsPath,
+    statusServerPort: port,
+    workspaceRoot: '.',
+    createdAt: new Date().toISOString(),
+  };
+
+  const statePath = resolve(gsdDir, 'state.json');
+  await writeGsdState(cwd, state, statePath);
+
+  const goalsFile = resolve(cwd, goalsPath.startsWith('./') ? goalsPath.slice(2) : goalsPath);
+  if (!existsSync(goalsFile)) {
+    await mkdir(pathDirname(goalsFile), { recursive: true }).catch(() => {});
+    await writeFile(
+      goalsFile,
+      `# Goals
+
+## Pending
+- [ ] My first goal — describe what you want to build
+
+## In Progress
+
+## Done
+`,
+      'utf-8',
+    );
+  }
+
+  console.log('\n  ✓ Initialized! Next steps:');
+  console.log('    1. Edit goals.md and add your first goal');
+  console.log('    2. Run ./run to start the daemon');
+  console.log('    3. Run: tmux attach -t gsd-self  to watch it work\n');
 }

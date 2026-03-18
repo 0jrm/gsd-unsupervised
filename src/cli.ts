@@ -144,7 +144,7 @@ program
       ? resolve(cwd, opts.state)
       : resolve(cwd, '.gsd', 'state.json');
     if (!existsSync(statePath)) {
-      console.error('No state found. Run: npx gsd-unsupervised init');
+      console.error('Not initialized. Run ./setup.sh or npx gsd-unsupervised init');
       process.exit(1);
     }
     const projectRoot = dirname(dirname(statePath));
@@ -168,6 +168,7 @@ program
           statusServerPort: state.statusServerPort,
           statePath,
           verbose,
+          ...(state.agent && { agent: state.agent as import('./config.js').AutopilotConfig['agent'] }),
         },
         ignorePlanningConfig: opts.ignorePlanningConfig as boolean,
         logger: log,
@@ -193,13 +194,27 @@ program
     }
   });
 
-/** Onboarding wizard: create .gsd/ and goals. */
+/** Onboarding: create .gsd/state.json and goals.md. Use flags for non-interactive. */
 program
   .command('init')
-  .description('Onboarding wizard: project name, repo path, first goal, Twilio/ngrok config')
-  .action(async () => {
-    const { runInit } = await import('./init-wizard.js');
-    await runInit();
+  .description('Initialize .gsd/state.json and goals.md (use --agent/--goals/--port for non-interactive)')
+  .option('--agent <name>', 'Agent type: cursor, cn, claude-code, gemini-cli, codex', 'cursor')
+  .option('--goals <path>', 'Goals file path', './goals.md')
+  .option('--port <n>', 'Status server port', '3000')
+  .action(async (opts) => {
+    const useSimple =
+      process.argv.includes('--agent') || process.argv.includes('--goals') || process.argv.includes('--port');
+    if (useSimple) {
+      const { runSimpleInit } = await import('./init-wizard.js');
+      await runSimpleInit({
+        agent: opts.agent as string,
+        goals: opts.goals as string,
+        port: parseInt(opts.port as string, 10),
+      });
+    } else {
+      const { runInit } = await import('./init-wizard.js');
+      await runInit();
+    }
   });
 
 /** Add a goal to an existing project with optional interactive clarification. */

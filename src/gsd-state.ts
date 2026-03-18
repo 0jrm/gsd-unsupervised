@@ -13,6 +13,8 @@ export interface GsdState {
   mode: GsdMode;
   /** Project name (e.g. "gsd-unsupervised" or "my-other-app"). */
   project: string;
+  /** Agent type: cursor, cn, claude-code, gemini-cli, codex. */
+  agent?: string;
   /** Absolute or relative path to workspace root (where .planning/ and goals live). */
   workspaceRoot: string;
   /** Path to goals.md relative to workspaceRoot or absolute. */
@@ -71,6 +73,7 @@ export async function readGsdStateFromPath(
     return {
       mode: (data.mode === 'project' ? 'project' : 'self') as GsdMode,
       project: typeof data.project === 'string' ? data.project : 'gsd-unsupervised',
+      agent: typeof data.agent === 'string' ? data.agent : undefined,
       workspaceRoot: typeof data.workspaceRoot === 'string' ? data.workspaceRoot : fallbackRoot,
       goalsPath: typeof data.goalsPath === 'string' ? data.goalsPath : './goals.md',
       daemonPid: typeof data.daemonPid === 'number' ? data.daemonPid : undefined,
