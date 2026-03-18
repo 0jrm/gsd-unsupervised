@@ -13,6 +13,10 @@ Autonomous orchestrator that drives Cursor's headless agent through the full [GS
 - **Local status dashboard** — Optional HTTP server (`--status-server <port>`) serving an HTML dashboard and `/api/status` JSON. Use `--ngrok` to have the daemon run `ngrok http <port>` so the dashboard is reachable via a public URL while the process runs.
 - **Optional SMS (Twilio)** — Notifications for goal complete, goal failed, and daemon paused; requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `TWILIO_TO`. If unset, the daemon runs without SMS.
 
+## Requirements
+
+Node ≥ 18, tmux, and one of: Cursor, Claude Code, Continue (cn), Gemini CLI, or Codex.
+
 ## Prerequisites
 
 - **Node.js** ≥ 18
@@ -46,20 +50,42 @@ This project is WSL-aware and includes helpers and a diagnostics script for path
 
 When `clip.exe` cannot be resolved (for example, on non-WSL Linux), clipboard integration should be treated as optional by higher-level tooling: consumers should check for `null` and simply skip clipboard-related features instead of failing daemon startup. The diagnostics script helps you see exactly what the project can and cannot infer about your environment.
 
+## Quick Start
+
+```bash
+# 1. Install
+npm install -g gsd-unsupervised
+# or clone and use locally:
+git clone https://github.com/0jrm/gsd-unsupervised && cd gsd-unsupervised && npm install
+
+# 2. Initialize in your project
+cd your-project
+./setup.sh
+# or non-interactively:
+npx gsd-unsupervised init --agent cursor --goals ./goals.md
+
+# 3. Add a goal
+echo "- [ ] Add dark mode to the dashboard" >> goals.md
+
+# 4. Start the daemon
+./run
+# Attach to watch: tmux attach -t gsd-self
+```
+
+That's it. The daemon will read goals.md, invoke your agent, and SMS you when done (if Twilio is configured).
+
 ## Install
 
 From npm (recommended):
 
 ```bash
 npm install -g gsd-unsupervised
-# or
-npx gsd-unsupervised init
 ```
 
 From source:
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/0jrm/gsd-unsupervised
 cd gsd-unsupervised
 npm install
 npm run build
@@ -92,10 +118,12 @@ For a deeper explanation of how WSL detection and path resolution work (and more
 ### First-time setup (any repo)
 
 ```bash
-npx gsd-unsupervised init
+./setup.sh
+# or non-interactively:
+npx gsd-unsupervised init --agent cursor --goals ./goals.md
 ```
 
-Prompts: project name, repo path, first goal, Twilio SMS (y/n), public dashboard via ngrok (y/n). Writes `.gsd/state.json`, goals, and optional `.env`. Then start with `./run`.
+`setup.sh` asks: agent type, goals path, status port, optional Twilio. Writes `.gsd/state.json` and `goals.md`. Then start with `./run`.
 
 ### Recommended (dashboard + public URL)
 
@@ -105,7 +133,7 @@ From the project root you can use the **`run`** script (reads `.gsd/state.json`,
 ./run
 ```
 
-If there is no `.gsd/state.json`, run `npx gsd-unsupervised init` first.
+If not yet initialized, run `./setup.sh` or `npx gsd-unsupervised init` first.
 
 Or run the daemon explicitly with the status server and ngrok:
 
