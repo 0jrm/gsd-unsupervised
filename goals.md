@@ -51,3 +51,5 @@
 
 ## Done
 <!-- orchestrator moves goals here on completion -->
+- [ ] Add a hello world comment to src/logger.ts
+- [ ] Add a hello world comment to src/logger.ts
