@@ -1,3 +1,10 @@
+---
+phase: 07-wsl-bootstrap
+plan: 02
+subsystem: infra
+tags: [wsl, diagnostics, documentation]
+---
+
 # Phase 7 Plan 02: WSL Bootstrap Diagnostics Summary
 
 **Finalize WSL bootstrap diagnostics and documentation so WSL users can understand and configure Cursor and clipboard paths with a single script run.**
@@ -26,4 +33,3 @@
 ## Next Step
 
 - Phase 7 is fully complete; WSL bootstrap helpers, diagnostics script, and documentation together support end-to-end unsupervised execution under WSL with clear visibility into path and clipboard configuration.
-

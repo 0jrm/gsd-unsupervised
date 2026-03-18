@@ -1,12 +1,12 @@
 ---
-phase: 07-WSL-bootstrap
+phase: 07-wsl-bootstrap
 plan: 01
 subsystem: infra
 tags: [wsl, paths, cursor-agent, clip.exe]
 
 # Dependency graph
 requires:
-  - phase: 06-Status Server
+  - phase: 06-status-server
     provides: HTTP status server and daemon wiring
 provides:
   - Centralized WSL detection helpers
@@ -81,7 +81,7 @@ Each task was committed atomically:
 - `src/bootstrap/wsl-bootstrap.ts` — WSL bootstrap that computes resolved environment (Cursor path, clip.exe path, workspace WSL/Windows paths) for the running process.
 - `src/cursor-agent.ts` — Agent factory now uses `getCursorBinaryPath` so Cursor invocations go through the shared path resolver.
 - `src/cli.ts` — CLI startup now calls `applyWslBootstrap` and logs the resolved environment for easier debugging.
-- `README.md` — New “WSL Support & Paths” section describing WSL support, path discovery, and override mechanisms.
+- `README.md` — New "WSL Support & Paths" section describing WSL support, path discovery, and override mechanisms.
 
 ## Decisions Made
 - Keep WSL detection conservative by combining platform checks, standard WSL environment variables, and `/proc/version` inspection when available.
@@ -105,6 +105,5 @@ None.
 
 ---
 
-*Phase: 07-WSL-bootstrap*
+*Phase: 07-wsl-bootstrap*
 *Completed: 2026-03-17*
-
