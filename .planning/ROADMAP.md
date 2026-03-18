@@ -106,7 +106,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 08-01: cn adapter core (runContinueCli, parseCnOutput, config)
+- [x] 08-01: cn adapter core (runContinueCli, parseCnOutput, config)
 - [ ] 08-02: Agent registry, createAgentInvoker, GSD rules compatibility
 - [ ] 08-03: Tests and documentation
 
@@ -124,4 +124,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 5. Crash Detection & Recovery | 2/2 | Complete | 2026-03-17 |
 | 6. Status Server | 1/1 | Complete | 2026-03-17 |
 | 7. WSL Bootstrap | 2/2 | Complete | 2026-03-17 |
-| 8. CN (Continue CLI) Support | 0/3 | Not started | — |
+| 8. CN (Continue CLI) Support | 1/3 | In progress | — |
