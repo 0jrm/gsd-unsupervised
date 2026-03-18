@@ -58,6 +58,12 @@ export const AutopilotConfigSchema = z.object({
       backoffMs: [5000, 30000, 120000],
       nonRetryableExitCodes: [1, 127],
     }),
+  /** When set, run after each execute-plan success to verify (e.g. "npm test" or "npm run build"). */
+  verifyCommand: z.string().optional(),
+  /** Timeout for verify command in ms. Default 120000. */
+  verifyTimeoutMs: z.number().int().min(1000).default(120000),
+  /** When true and verify fails, queue a fix goal to re-enter intake. Default false. */
+  autoFixOnVerifyFail: z.boolean().default(false),
 });
 
 export type AutopilotConfig = z.infer<typeof AutopilotConfigSchema>;
@@ -162,6 +168,27 @@ function readPlanningOverrides(
       overrides.agent = parsed.agent;
       logger?.debug(
         { from: '.planning/config.json', agent: parsed.agent },
+        'Planning config override applied',
+      );
+    }
+    if (typeof parsed.verifyCommand === 'string') {
+      overrides.verifyCommand = parsed.verifyCommand;
+      logger?.debug(
+        { from: '.planning/config.json', verifyCommand: parsed.verifyCommand },
+        'Planning config override applied',
+      );
+    }
+    if (typeof parsed.verifyTimeoutMs === 'number') {
+      overrides.verifyTimeoutMs = parsed.verifyTimeoutMs;
+      logger?.debug(
+        { from: '.planning/config.json', verifyTimeoutMs: parsed.verifyTimeoutMs },
+        'Planning config override applied',
+      );
+    }
+    if (typeof parsed.autoFixOnVerifyFail === 'boolean') {
+      overrides.autoFixOnVerifyFail = parsed.autoFixOnVerifyFail;
+      logger?.debug(
+        { from: '.planning/config.json', autoFixOnVerifyFail: parsed.autoFixOnVerifyFail },
         'Planning config override applied',
       );
     }

@@ -16,7 +16,7 @@ export interface SessionLogContext {
  * - phaseNumber, planNumber: optional; set when in phase/plan loop for crash recovery
  * - sessionId: string | null
  * - command: full command string
- * - status: 'running' | 'done' | 'crashed' | 'timeout'
+ * - status: 'running' | 'done' | 'crashed' | 'timeout' | 'verify-failed' | 'skipped'
  * - durationMs, error: optional
  * No in-place edits; append only.
  */
@@ -28,7 +28,7 @@ export interface SessionLogEntry {
   planNumber?: number;
   sessionId: string | null;
   command: string;
-  status: 'running' | 'done' | 'crashed' | 'timeout';
+  status: 'running' | 'done' | 'crashed' | 'timeout' | 'verify-failed' | 'skipped';
   durationMs?: number;
   error?: string;
 }

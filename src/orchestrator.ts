@@ -20,6 +20,7 @@ import {
   getNextUnexecutedPlan,
 } from './roadmap-parser.js';
 import { isWorkingTreeClean, createCheckpoint } from './git.js';
+import { appendSessionLog } from './session-log.js';
 import { readStateFile } from './state-index.js';
 import type { StateSnapshot } from './state-types.js';
 import type { ResumePointer } from './resume-pointer.js';
@@ -142,6 +143,54 @@ const stubAgent: AgentInvoker = async (command, workspaceDir, logger, _logContex
   return { success: true, output: 'stub' };
 };
 
+export interface VerifyResult {
+  passed: boolean;
+  exitCode?: number;
+  stdout?: string;
+  stderr?: string;
+}
+
+/** Run verify command if configured. Returns passed=true when no verifyCommand or exit 0. */
+async function runVerifyIfConfigured(options: {
+  config: AutopilotConfig;
+  logger: Logger;
+}): Promise<VerifyResult> {
+  const { config } = options;
+  if (!config.verifyCommand?.trim()) {
+    return { passed: true };
+  }
+  const timeoutMs = config.verifyTimeoutMs ?? 120_000;
+  return new Promise((resolve) => {
+    const t = setTimeout(() => {
+      resolve({
+        passed: false,
+        exitCode: 124,
+        stderr: `Verify command timed out after ${timeoutMs}ms`,
+      });
+    }, timeoutMs);
+    execFile(
+      'sh',
+      ['-c', config.verifyCommand!],
+      { cwd: config.workspaceRoot, encoding: 'utf-8', maxBuffer: 1024 * 1024 },
+      (err, stdout, stderr) => {
+        clearTimeout(t);
+        if (err) {
+          const code = (err as NodeJS.ErrnoException).code;
+          const errStderr = (err as { stderr?: string }).stderr ?? stderr ?? err.message;
+          resolve({
+            passed: false,
+            exitCode: typeof code === 'number' ? code : 1,
+            stdout: stdout ?? '',
+            stderr: errStderr,
+          });
+        } else {
+          resolve({ passed: true, stdout: stdout ?? '', stderr: stderr ?? '' });
+        }
+      },
+    );
+  });
+}
+
 export async function orchestrateGoal(options: {
   goal: Goal;
   config: AutopilotConfig;
@@ -156,9 +205,57 @@ export async function orchestrateGoal(options: {
    * Plans will still be discovered/executed for skipped phases.
    */
   skipToPhase?: number | null;
+  /** When verify fails and autoFixOnVerifyFail is true, called to queue a fix goal. */
+  onQueueFixGoal?: (title: string, body: string) => void;
 }): Promise<void> {
-  const { goal, config, isShuttingDown, onProgress, resumeFrom, skipToPhase } = options;
+  const { goal, config, isShuttingDown, onProgress, resumeFrom, skipToPhase, onQueueFixGoal } =
+    options;
   const logger = createChildLogger(options.logger, 'orchestrator');
+  const sessionLogPath = path.isAbsolute(config.sessionLogPath)
+    ? config.sessionLogPath
+    : path.join(config.workspaceRoot, config.sessionLogPath);
+
+  /** After execute-plan success: run verify if configured. Returns false if verify failed and we handled it. */
+  async function afterPlanVerify(
+    planPath: string,
+    phaseNum: number,
+    planNumber: number,
+  ): Promise<boolean> {
+    if (!config.verifyCommand?.trim()) return true;
+    const verify = await runVerifyIfConfigured({ config, logger });
+    if (verify.passed) return true;
+    logger.warn(
+      {
+        plan: planPath,
+        exitCode: verify.exitCode,
+        stdout: verify.stdout,
+        stderr: verify.stderr,
+      },
+      'verify command failed after plan',
+    );
+    await appendSessionLog(sessionLogPath, {
+      timestamp: new Date().toISOString(),
+      goalTitle: goal.title,
+      phase: '/gsd/execute-plan',
+      phaseNumber: phaseNum,
+      planNumber,
+      sessionId: null,
+      command: `/gsd/execute-plan ${planPath}`,
+      status: 'verify-failed',
+      error: (verify.stderr ?? '').slice(0, 500),
+    });
+    if (config.autoFixOnVerifyFail && onQueueFixGoal) {
+      onQueueFixGoal(`Fix: verify failed after ${planPath}`, verify.stderr ?? '');
+    }
+    sm.fail('Verify failed after plan');
+    try {
+      await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nVerify failed`);
+    } catch (smsErr) {
+      logger.warn({ err: smsErr }, 'SMS notification failed');
+    }
+    return false;
+  }
+
   const agentComponent =
     config.agent === 'cursor' ? 'cursor-agent' : config.agent;
   const agentLogger = createChildLogger(options.logger, agentComponent);
@@ -349,6 +446,7 @@ export async function orchestrateGoal(options: {
                 }
                 return;
               }
+              if (!(await afterPlanVerify(pNext.planPath, pNum, pNext.planNumber))) return;
               await writeDaemonStateMd({
                 stateMdPath,
                 phaseNumber: pNum,
@@ -433,6 +531,7 @@ export async function orchestrateGoal(options: {
         }
         return;
       }
+      if (!(await afterPlanVerify(targetPlan.planPath, phaseNum, targetPlan.planNumber))) return;
       await writeDaemonStateMd({
         stateMdPath,
         phaseNumber: phaseNum,
@@ -484,6 +583,7 @@ export async function orchestrateGoal(options: {
           }
           return;
         }
+        if (!(await afterPlanVerify(nextPlan.planPath, phaseNum, nextPlan.planNumber))) return;
         await writeDaemonStateMd({
           stateMdPath,
           phaseNumber: phaseNum,
@@ -591,6 +691,7 @@ export async function orchestrateGoal(options: {
             }
             return;
           }
+          if (!(await afterPlanVerify(pNext.planPath, pNum, pNext.planNumber))) return;
           await writeDaemonStateMd({
             stateMdPath,
             phaseNumber: pNum,
@@ -870,6 +971,7 @@ export async function orchestrateGoal(options: {
           }
           return;
         }
+        if (!(await afterPlanVerify(nextPlan.planPath, phaseNum, nextPlan.planNumber))) return;
         await writeDaemonStateMd({
           stateMdPath,
           phaseNumber: phaseNum,

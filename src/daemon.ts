@@ -405,6 +405,17 @@ export async function runDaemon(
             },
             resumeFrom: currentResumeFrom,
             skipToPhase: attempt > 1 && plannedUpToPhaseNum > 0 ? plannedUpToPhaseNum + 1 : null,
+            onQueueFixGoal:
+              config.autoFixOnVerifyFail
+                ? (title, body) => {
+                    addToQueue({
+                      title,
+                      status: 'pending',
+                      raw: `- [ ] ${title}`,
+                      metadataBlock: body,
+                    });
+                  }
+                : undefined,
           });
           break;
         } catch (err) {
