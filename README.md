@@ -22,16 +22,17 @@ Autonomous orchestrator that drives Cursor's headless agent through the full [GS
 
 ### WSL Support & Paths
 
-This project is WSL-aware and includes helpers for path resolution when running under WSL2:
+This project is WSL-aware and includes helpers and a diagnostics script for path resolution when running under WSL2:
 
 - **WSL detection** lives in `src/config/wsl.ts`, which can answer whether the current process is running under WSL and convert `/mnt/<drive>/...` paths to Windows-style `X:\...` paths.
 - **Centralized path resolution** is provided by `src/config/paths.ts`:
   - `getCursorBinaryPath` chooses the effective Cursor agent binary path, preferring the `GSD_CURSOR_BIN` environment variable, then `cursorAgentPath` from config, and finally falling back to `cursor-agent`. On WSL it can map `/mnt/*` paths to Windows-style paths when needed.
-  - `getClipExePath` resolves a Windows `clip.exe` location when running under WSL (defaulting to `C:\Windows\System32\clip.exe`), or returns `null` when clipboard integration is unavailable.
+  - `getClipExePath` resolves a Windows `clip.exe` location when running under WSL (defaulting to `C:\Windows\System32\clip.exe` when present), or returns `null` when clipboard integration is unavailable.
   - `getWorkspaceDisplayPath` exposes both the WSL path and, when possible, a corresponding Windows path for the workspace root.
 - **WSL bootstrap** in `src/bootstrap/wsl-bootstrap.ts` wires these helpers together and is invoked from the CLI startup so the daemon has a single place to understand the current environment.
+- **Diagnostics script** at `scripts/bootstrap-wsl.sh` runs a focused WSL environment check from your shell and prints suggested values for `GSD_CURSOR_BIN` and `GSD_CLIP_EXE`.
 
-When `clip.exe` cannot be resolved (for example, on non-WSL Linux), clipboard integration should be treated as optional by higher-level tooling: consumers should check for `null` and simply skip clipboard-related features instead of failing daemon startup.
+When `clip.exe` cannot be resolved (for example, on non-WSL Linux), clipboard integration should be treated as optional by higher-level tooling: consumers should check for `null` and simply skip clipboard-related features instead of failing daemon startup. The diagnostics script helps you see exactly what the project can and cannot infer about your environment.
 
 ## Install
 
@@ -52,17 +53,22 @@ npm install
 npm run build
 ```
 
-### WSL Bootstrap (one command)
+### WSL Bootstrap & Diagnostics
 
-On WSL2, from the project root:
+On WSL2, from the project root you can run a quick diagnostics pass:
 
 ```bash
-bash setup.sh              # Detect WSL2, sync GSD rules from Windows .cursor into repo
-bash setup.sh --dry-run     # Show what would be done (no changes)
-bash setup.sh --validate    # Bootstrap + validation checks + orchestrator smoke test
+bash scripts/bootstrap-wsl.sh
 ```
 
-**Prerequisites:** WSL2, Cursor installed on Windows with GSD rules in `.cursor/rules`, and (for `--validate`) Node.js ≥18 and npm. A successful run creates or updates `.cursor/rules` in the repo and (with `--validate`) runs the test suite. Re-runs are idempotent.
+This script:
+
+- Detects WSL.
+- Shows your workspace path in both WSL and Windows form when possible.
+- Reports current and suggested values for `GSD_CURSOR_BIN` and `GSD_CLIP_EXE`.
+- Exits non-zero when it detects WSL but cannot infer a reliable Windows mapping for the workspace, so you can catch misconfigurations early.
+
+For a deeper explanation of how WSL detection and path resolution work (and more examples of environment variable configuration), see `docs/wsl-bootstrap.md`.
 
 ## Usage
 
