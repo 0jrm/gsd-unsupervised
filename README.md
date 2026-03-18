@@ -28,7 +28,7 @@ Node ≥ 18, tmux, and one of: Cursor, Claude Code, Continue (cn), Gemini CLI, o
 
 You can use [Continue's headless CLI](https://docs.continue.dev/guides/cli) (`cn`) instead of Cursor as the agent:
 
-1. **Install cn**: `curl -fsSL https://raw.githubusercontent.com/continuedev/continue/main/extensions/cli/scripts/install.sh | bash` or via npm.
+1. **Install cn**: `npm install -g @continuedev/cli` or `curl -fsSL https://raw.githubusercontent.com/continuedev/continue/main/extensions/cli/scripts/install.sh | bash`.
 2. **Config**: Fill in the `models` section in `.continue/config.yaml` (at project root). The file references GSD rules from `.cursor/rules/`; add your model (e.g. Anthropic, OpenAI) per [Continue config reference](https://docs.continue.dev/reference).
 3. **Set agent**: `--agent cn` or `"agent": "cn"` in `.planning/config.json`.
 4. **CONTINUE_API_KEY**: Required for CI/headless use. Get from [continue.dev/settings/api-keys](https://continue.dev/settings/api-keys).
@@ -180,7 +180,15 @@ Requires [ngrok](https://ngrok.com/) on your PATH and an ngrok authtoken (e.g. `
 
 ### Agent selection (`--agent`)
 
-The `--agent` flag selects which AI coding agent the orchestrator invokes. Supported values: `cursor` (default), `cn` (Continue CLI), `claude-code`, `gemini-cli`, `codex`. Invalid names fail fast at startup and do not start the daemon. Omitting the flag or using `--agent=cursor` yields identical behavior to the original Cursor-only implementation (backward compatible). `cn` is a first-class agent; others are stub placeholders (TODO).
+| Agent | Status | Notes |
+|-------|--------|-------|
+| `cursor` | Supported | Default. CURSOR_API_KEY required. |
+| `cn` | Supported | Continue CLI. `npm install -g @continuedev/cli`, set CONTINUE_API_KEY. |
+| `claude-code` | Stub | Coming soon. |
+| `gemini-cli` | Stub | Coming soon. |
+| `codex` | Stub | Coming soon. |
+
+Invalid names fail fast at startup.
 
 ### Goals file (`goals.md`)
 
@@ -291,7 +299,7 @@ Resume uses this to re-run `execute-plan` for phase 2 plan 1 only, then continue
 
 **Parallel goal pool:** With `--parallel`, a worker pool of size `--max-concurrent` is used; a per-workspace mutex keeps one goal running at a time for a single workspace (phase-level parallel inside execute-phase still applies).
 
-**SMS (Twilio):** Optional. Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, and `TWILIO_TO` to receive SMS on goal complete, goal failed, and daemon paused (after 3 retries). If any are unset, SMS is skipped and the daemon runs normally. To verify delivery, run `npx gsd-unsupervised test-sms` from the project root (after `npm run build`).
+**SMS (Twilio):** Optional. Three message types: goal started `[gsd] Started: …`, goal complete, goal crashed `[gsd] Crashed: …`. Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, and `TWILIO_TO` in `.env`. `setup.sh` prompts for Twilio credentials when you answer `y` to SMS notifications. To verify delivery, run `npx gsd-unsupervised test-sms`.
 
 **State and heartbeat:** When started via `./run` or `gsd-unsupervised run --state .gsd/state.json`, the daemon writes to `.gsd/state.json` (PID, current goal, progress, `lastHeartbeat`). You can use `lastHeartbeat` in an external cron or script to send a periodic "alive" SMS (e.g. every 30 min) or alert if the heartbeat is stale (e.g. >10 min).
 
