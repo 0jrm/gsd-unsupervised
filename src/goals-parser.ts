@@ -95,6 +95,10 @@ export function parseGoalsFile(content: string): ParsedGoals & { warnings: Parse
     if (match) {
       const raw = trimmed;
       const title = match[2].trim();
+      if (!title) {
+        warnings.push({ lineNumber, line: trimmed, reason: 'checkbox line has empty title; skipped' });
+        continue;
+      }
       let description: string | undefined;
       let successCriteria: string[] | undefined;
 
