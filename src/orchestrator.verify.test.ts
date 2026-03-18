@@ -82,11 +82,17 @@ async function runWithVerifySetup(options: {
   ].join('\n');
   writeFileSync(roadmapPath, roadmapContent, 'utf-8');
 
+  const validPlanContent = [
+    '<objective>Objective</objective>',
+    '<tasks><task type="auto"><name>Task</name><action>Action</action></task></tasks>',
+    '<verification>Verify</verification>',
+    '<success_criteria>Done</success_criteria>',
+  ].join('\n\n');
   const phase1Dir = join(planningDir, 'phases', '01-alpha');
   mkdirSync(phase1Dir, { recursive: true });
-  writeFileSync(join(phase1Dir, '01-01-PLAN.md'), '# P1\n', 'utf-8');
+  writeFileSync(join(phase1Dir, '01-01-PLAN.md'), validPlanContent, 'utf-8');
   writeFileSync(join(phase1Dir, '01-01-SUMMARY.md'), '# S1\n', 'utf-8');
-  writeFileSync(join(phase1Dir, '01-02-PLAN.md'), '# P2\n', 'utf-8');
+  writeFileSync(join(phase1Dir, '01-02-PLAN.md'), validPlanContent, 'utf-8');
 
   const onQueueFixGoal = vi.fn();
   const agent: AgentInvoker = async (cmd) => {

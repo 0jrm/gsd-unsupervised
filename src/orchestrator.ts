@@ -19,6 +19,7 @@ import {
   discoverPlans,
   getNextUnexecutedPlan,
 } from './roadmap-parser.js';
+import { validatePlanFile } from './plan-validator.js';
 import { isWorkingTreeClean, createCheckpoint } from './git.js';
 import { appendSessionLog } from './session-log.js';
 import { readStateFile } from './state-index.js';
@@ -424,6 +425,33 @@ export async function orchestrateGoal(options: {
               await ensureCleanGitOrCheckpoint();
               await waitForCpuHeadroom();
               sm.advance(GoalLifecyclePhase.ExecutingPlan);
+              const validation = await validatePlanFile(pNext.planPath);
+              if (!validation.valid) {
+                logger.warn(
+                  { plan: pNext.planPath, errors: validation.errors },
+                  'plan validation failed, skipping',
+                );
+                await appendSessionLog(sessionLogPath, {
+                  timestamp: new Date().toISOString(),
+                  goalTitle: goal.title,
+                  phase: '/gsd/execute-plan',
+                  phaseNumber: pNum,
+                  planNumber: pNext.planNumber,
+                  sessionId: null,
+                  command: `/gsd/execute-plan ${pNext.planPath}`,
+                  status: 'skipped',
+                  error: validation.errors.join('; '),
+                });
+                await writeFile(
+                  pNext.summaryPath,
+                  `# Skipped\n\nValidation failed: ${validation.errors.join('; ')}\n`,
+                  'utf-8',
+                );
+                sm.setPlanInfo(pNext.planNumber + 1, pPlans.length);
+                pPlans = await discoverPlans(pDir);
+                pNext = getNextUnexecutedPlan(pPlans);
+                continue;
+              }
               const exec: GsdCommand = {
                 command: '/gsd/execute-plan',
                 args: pNext.planPath,
@@ -507,51 +535,77 @@ export async function orchestrateGoal(options: {
       await ensureCleanGitOrCheckpoint();
       await waitForCpuHeadroom();
       sm.advance(GoalLifecyclePhase.ExecutingPlan);
-      const execCmd: GsdCommand = {
-        command: '/gsd/execute-plan',
-        args: targetPlan.planPath,
-        description: `Execute plan ${targetPlan.planNumber} (resume retry)`,
-      };
-      sm.setLastCommand(execCmd);
-      logger.info(
-        { cmd: execCmd.command, plan: targetPlan.planNumber },
-        `Resume: ${execCmd.command} ${execCmd.args}`,
-      );
-      let result = await agent(execCmd, config.workspaceRoot, agentLogger, {
-        goalTitle: goal.title,
-        phaseNumber: phaseNum,
-        planNumber: targetPlan.planNumber,
-      });
-      if (!result.success) {
-        sm.fail(result.error ?? 'Agent failed');
-        try {
-          await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
-        } catch (smsErr) {
-          logger.warn({ err: smsErr }, 'SMS notification failed');
+      const targetValidation = await validatePlanFile(targetPlan.planPath);
+      if (!targetValidation.valid) {
+        logger.warn(
+          { plan: targetPlan.planPath, errors: targetValidation.errors },
+          'plan validation failed, skipping',
+        );
+        await appendSessionLog(sessionLogPath, {
+          timestamp: new Date().toISOString(),
+          goalTitle: goal.title,
+          phase: '/gsd/execute-plan',
+          phaseNumber: phaseNum,
+          planNumber: targetPlan.planNumber,
+          sessionId: null,
+          command: `/gsd/execute-plan ${targetPlan.planPath}`,
+          status: 'skipped',
+          error: targetValidation.errors.join('; '),
+        });
+        await writeFile(
+          targetPlan.summaryPath,
+          `# Skipped\n\nValidation failed: ${targetValidation.errors.join('; ')}\n`,
+          'utf-8',
+        );
+        sm.setPlanInfo(targetPlan.planNumber + 1, plans.length);
+        plans = await discoverPlans(phaseDir);
+      } else {
+        const execCmd: GsdCommand = {
+          command: '/gsd/execute-plan',
+          args: targetPlan.planPath,
+          description: `Execute plan ${targetPlan.planNumber} (resume retry)`,
+        };
+        sm.setLastCommand(execCmd);
+        logger.info(
+          { cmd: execCmd.command, plan: targetPlan.planNumber },
+          `Resume: ${execCmd.command} ${execCmd.args}`,
+        );
+        let result = await agent(execCmd, config.workspaceRoot, agentLogger, {
+          goalTitle: goal.title,
+          phaseNumber: phaseNum,
+          planNumber: targetPlan.planNumber,
+        });
+        if (!result.success) {
+          sm.fail(result.error ?? 'Agent failed');
+          try {
+            await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`);
+          } catch (smsErr) {
+            logger.warn({ err: smsErr }, 'SMS notification failed');
+          }
+          return;
         }
-        return;
+        if (!(await afterPlanVerify(targetPlan.planPath, phaseNum, targetPlan.planNumber))) return;
+        await writeDaemonStateMd({
+          stateMdPath,
+          phaseNumber: phaseNum,
+          totalPhases,
+          phaseName: phase.name,
+          planNumber: targetPlan.planNumber,
+          totalPlans: plans.length,
+          status: `Executed plan ${targetPlan.planNumber}`,
+          lastActivity: new Date().toISOString(),
+          gitSha: await getGitSha(config.workspaceRoot),
+        });
+        await reportProgress({
+          stateMdPath,
+          logger,
+          onProgress,
+          expectedPhase: phaseNum,
+          expectedSummaryPath: targetPlan.summaryPath,
+        });
+        sm.setPlanInfo(targetPlan.planNumber + 1, plans.length);
+        plans = await discoverPlans(phaseDir);
       }
-      if (!(await afterPlanVerify(targetPlan.planPath, phaseNum, targetPlan.planNumber))) return;
-      await writeDaemonStateMd({
-        stateMdPath,
-        phaseNumber: phaseNum,
-        totalPhases,
-        phaseName: phase.name,
-        planNumber: targetPlan.planNumber,
-        totalPlans: plans.length,
-        status: `Executed plan ${targetPlan.planNumber}`,
-        lastActivity: new Date().toISOString(),
-        gitSha: await getGitSha(config.workspaceRoot),
-      });
-      await reportProgress({
-        stateMdPath,
-        logger,
-        onProgress,
-        expectedPhase: phaseNum,
-        expectedSummaryPath: targetPlan.summaryPath,
-      });
-      sm.setPlanInfo(targetPlan.planNumber + 1, plans.length);
-      plans = await discoverPlans(phaseDir);
       let nextPlan = getNextUnexecutedPlan(plans);
 
       while (nextPlan) {
@@ -562,6 +616,33 @@ export async function orchestrateGoal(options: {
         await ensureCleanGitOrCheckpoint();
         await waitForCpuHeadroom();
         sm.advance(GoalLifecyclePhase.ExecutingPlan);
+        const nextValidation = await validatePlanFile(nextPlan.planPath);
+        if (!nextValidation.valid) {
+          logger.warn(
+            { plan: nextPlan.planPath, errors: nextValidation.errors },
+            'plan validation failed, skipping',
+          );
+          await appendSessionLog(sessionLogPath, {
+            timestamp: new Date().toISOString(),
+            goalTitle: goal.title,
+            phase: '/gsd/execute-plan',
+            phaseNumber: phaseNum,
+            planNumber: nextPlan.planNumber,
+            sessionId: null,
+            command: `/gsd/execute-plan ${nextPlan.planPath}`,
+            status: 'skipped',
+            error: nextValidation.errors.join('; '),
+          });
+          await writeFile(
+            nextPlan.summaryPath,
+            `# Skipped\n\nValidation failed: ${nextValidation.errors.join('; ')}\n`,
+            'utf-8',
+          );
+          sm.setPlanInfo(nextPlan.planNumber + 1, plans.length);
+          plans = await discoverPlans(phaseDir);
+          nextPlan = getNextUnexecutedPlan(plans);
+          continue;
+        }
         const cmd: GsdCommand = {
           command: '/gsd/execute-plan',
           args: nextPlan.planPath,
@@ -671,6 +752,33 @@ export async function orchestrateGoal(options: {
           await ensureCleanGitOrCheckpoint();
           await waitForCpuHeadroom();
           sm.advance(GoalLifecyclePhase.ExecutingPlan);
+          const pNextValidation = await validatePlanFile(pNext.planPath);
+          if (!pNextValidation.valid) {
+            logger.warn(
+              { plan: pNext.planPath, errors: pNextValidation.errors },
+              'plan validation failed, skipping',
+            );
+            await appendSessionLog(sessionLogPath, {
+              timestamp: new Date().toISOString(),
+              goalTitle: goal.title,
+              phase: '/gsd/execute-plan',
+              phaseNumber: pNum,
+              planNumber: pNext.planNumber,
+              sessionId: null,
+              command: `/gsd/execute-plan ${pNext.planPath}`,
+              status: 'skipped',
+              error: pNextValidation.errors.join('; '),
+            });
+            await writeFile(
+              pNext.summaryPath,
+              `# Skipped\n\nValidation failed: ${pNextValidation.errors.join('; ')}\n`,
+              'utf-8',
+            );
+            sm.setPlanInfo(pNext.planNumber + 1, pPlans.length);
+            pPlans = await discoverPlans(pDir);
+            pNext = getNextUnexecutedPlan(pPlans);
+            continue;
+          }
           const exec: GsdCommand = {
             command: '/gsd/execute-plan',
             args: pNext.planPath,
@@ -947,6 +1055,33 @@ export async function orchestrateGoal(options: {
         await waitForCpuHeadroom();
         sm.advance(GoalLifecyclePhase.ExecutingPlan);
 
+        const normValidation = await validatePlanFile(nextPlan.planPath);
+        if (!normValidation.valid) {
+          logger.warn(
+            { plan: nextPlan.planPath, errors: normValidation.errors },
+            'plan validation failed, skipping',
+          );
+          await appendSessionLog(sessionLogPath, {
+            timestamp: new Date().toISOString(),
+            goalTitle: goal.title,
+            phase: '/gsd/execute-plan',
+            phaseNumber: phaseNum,
+            planNumber: nextPlan.planNumber,
+            sessionId: null,
+            command: `/gsd/execute-plan ${nextPlan.planPath}`,
+            status: 'skipped',
+            error: normValidation.errors.join('; '),
+          });
+          await writeFile(
+            nextPlan.summaryPath,
+            `# Skipped\n\nValidation failed: ${normValidation.errors.join('; ')}\n`,
+            'utf-8',
+          );
+          sm.setPlanInfo(nextPlan.planNumber + 1, plans.length);
+          plans = await discoverPlans(phaseDir);
+          nextPlan = getNextUnexecutedPlan(plans);
+          continue;
+        }
         const execCmd: GsdCommand = {
           command: '/gsd/execute-plan',
           args: nextPlan.planPath,

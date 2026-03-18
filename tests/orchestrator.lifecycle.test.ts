@@ -76,9 +76,15 @@ async function runWithRecording(options: {
   // Phase 1 directory with one executed and one unexecuted plan.
   const phase1Dir = join(planningDir, 'phases', '01-alpha');
   mkdirSync(phase1Dir, { recursive: true });
-  writeFileSync(join(phase1Dir, '01-01-PLAN.md'), '# P1\n', 'utf-8');
+  const validPlanContent = [
+    '<objective>Objective</objective>',
+    '<tasks><task type="auto"><name>Task</name><action>Action</action></task></tasks>',
+    '<verification>Verify</verification>',
+    '<success_criteria>Done</success_criteria>',
+  ].join('\n\n');
+  writeFileSync(join(phase1Dir, '01-01-PLAN.md'), validPlanContent, 'utf-8');
   writeFileSync(join(phase1Dir, '01-01-SUMMARY.md'), '# S1\n', 'utf-8');
-  writeFileSync(join(phase1Dir, '01-02-PLAN.md'), '# P2\n', 'utf-8');
+  writeFileSync(join(phase1Dir, '01-02-PLAN.md'), validPlanContent, 'utf-8');
 
   // Intentionally do NOT create a directory for Phase 2 ("02-beta") to ensure
   // the orchestrator skips execute-plan for that phase but continues planning.
