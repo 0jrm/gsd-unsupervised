@@ -98,6 +98,8 @@ ${goalText}
     envLines.push('TWILIO_AUTH_TOKEN=');
     envLines.push('TWILIO_FROM=');
     envLines.push('TWILIO_TO=');
+    envLines.push('# ngrok URL + /webhook/sms — needed for two-way SMS');
+    envLines.push('TWILIO_WEBHOOK_URL=');
   }
   if (envLines.length > 0) {
     await writeFile(envPath, envLines.join('\n') + '\n', 'utf-8');

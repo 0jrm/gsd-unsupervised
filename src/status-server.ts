@@ -3,6 +3,12 @@ import { existsSync } from 'node:fs';
 import http from 'node:http';
 import express, { type Request, type Response } from 'express';
 import { appendPendingGoal } from './goals.js';
+import twilio from 'twilio';
+import { normalizeSmsInput } from './intake/normalizer.js';
+import { classifyGoal } from './intake/classifier.js';
+import { clarifyGoal, readPendingGoals, resolvePendingGoal, writePendingGoal } from './intake/clarifier.js';
+import { queueGoal } from './intake/goals-writer.js';
+import type { PendingGoal } from './intake/types.js';
 
 function escapeTwiML(s: string): string {
   return s
@@ -324,6 +330,148 @@ export interface CreateStatusServerResult {
   close: () => Promise<void>;
 }
 
+function sendTwiML(res: Response, message: string): void {
+  res
+    .type('text/xml')
+    .send(
+      `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escapeTwiML(message)}</Message></Response>`,
+    );
+}
+
+function registerSmsWebhookRoutes(
+  app: import('express').Express,
+  webhookOptions: WebhookOptions,
+  logger: StatusServerOptions['logger'] | undefined,
+): void {
+  const authToken = process.env.TWILIO_AUTH_TOKEN?.trim();
+
+  // If TWILIO_AUTH_TOKEN is set, twilio.webhook() will reject invalid requests (403).
+  const signatureMiddleware = authToken ? twilio.webhook() : null;
+
+  app.post(
+    '/webhook/sms',
+    express.urlencoded({ extended: false }),
+    (req: Request, res: Response, next: (err?: unknown) => void) => {
+      if (!signatureMiddleware) {
+        logger?.warn(
+          { env: 'TWILIO_AUTH_TOKEN', hasWebhookUrl: Boolean(process.env.TWILIO_WEBHOOK_URL) },
+          'TWILIO_AUTH_TOKEN not set — skipping Twilio signature validation (dev mode)',
+        );
+        next();
+        return;
+      }
+
+      signatureMiddleware(req, res, next);
+    },
+    async (req: Request, res: Response) => {
+      const body = typeof req.body?.Body === 'string' ? req.body.Body.trim() : '';
+      let from = typeof req.body?.From === 'string' ? req.body.From.trim() : '';
+      // `application/x-www-form-urlencoded` decodes `+` as space. Twilio typically sends
+      // phone numbers preserving '+' (often URL-encoded as %2B), but we defensively
+      // normalize common decoding artifacts.
+      from = from.replace(/\s+/g, '');
+      if (from && !from.startsWith('+') && /^\d+$/.test(from)) {
+        from = `+${from}`;
+      }
+
+      const pending = (await readPendingGoals(webhookOptions.workspaceRoot)).find(
+        (p) => p.raw.replyTo === from,
+      );
+
+      // Conversation flow:
+      // - No pending: "add <goal title>" => classify => queue (score 1-2) or create pending (score 3-5)
+      // - Pending + YES: confirm => resolve pending => queue goal
+      // - Pending + anything else: treat body as edited draft spec => update pending draft => ack
+      const upperBody = body.toUpperCase();
+
+      try {
+        if (pending && upperBody === 'YES') {
+          await resolvePendingGoal(webhookOptions.workspaceRoot, pending.id);
+          await queueGoal({
+            workspaceRoot: webhookOptions.workspaceRoot,
+            title: pending.raw.title,
+            successCriteria: [],
+            replyTo: from,
+          });
+          sendTwiML(res, 'Queued ✓');
+          return;
+        }
+
+        if (pending && upperBody !== 'YES' && body.length > 0) {
+          const updated: PendingGoal = { ...pending, draftSpec: body };
+          await resolvePendingGoal(webhookOptions.workspaceRoot, pending.id);
+          await writePendingGoal(webhookOptions.workspaceRoot, updated);
+          sendTwiML(res, 'Got it, updated');
+          return;
+        }
+
+        // No pending: accept "add <title>".
+        const lower = body.toLowerCase();
+        let title = '';
+        if (lower.startsWith('add ')) {
+          title = body.slice(4).trim();
+        } else if (lower.startsWith('goal ')) {
+          title = body.slice(5).trim();
+        } else {
+          title = body;
+        }
+
+        if (!title) {
+          sendTwiML(res, 'Usage: add <goal title> or reply YES to confirm');
+          return;
+        }
+
+        const rawGoal = normalizeSmsInput(title, from, webhookOptions.workspaceRoot);
+        const complexity = await classifyGoal(rawGoal);
+
+        if (complexity.score <= 2) {
+          await queueGoal({
+            workspaceRoot: webhookOptions.workspaceRoot,
+            title: rawGoal.title,
+            successCriteria: [],
+            replyTo: from,
+          });
+          sendTwiML(res, 'Queued ✓');
+          return;
+        }
+
+        const action = await clarifyGoal(rawGoal, complexity, webhookOptions.workspaceRoot);
+        if (action.action === 'queued') {
+          await queueGoal({
+            workspaceRoot: webhookOptions.workspaceRoot,
+            title: rawGoal.title,
+            successCriteria: [],
+            replyTo: from,
+          });
+          sendTwiML(res, 'Queued ✓');
+          return;
+        }
+
+        // Pending flow: caller can reply YES to confirm or send edited spec.
+        sendTwiML(res, 'Draft received. Reply YES to confirm, or send edits.');
+      } catch (err) {
+        sendTwiML(res, `Error: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    },
+  );
+}
+
+/**
+ * Express app factory used by supertest-based webhook tests.
+ * - Does not call `app.listen`.
+ * - Registers only webhook endpoints needed by the test suite.
+ */
+export function createStatusApp(
+  _getStatus: () => StatusPayload,
+  options?: StatusServerOptions,
+): import('express').Express {
+  const app = express();
+  if (options?.webhook) {
+    registerSmsWebhookRoutes(app, options.webhook, options.logger);
+  }
+  return app;
+}
+
 /**
  * Creates and starts an Express-based HTTP server. Resolves when listening or when port is in use (non-fatal).
  * - GET /: dashboard HTML (when options are provided) or legacy JSON.
@@ -464,6 +612,8 @@ export async function createStatusServer(
         `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${escapeTwiML(reply)}</Message></Response>`,
       );
     });
+
+    registerSmsWebhookRoutes(app, wh, options.logger);
   }
 
   /** Dashboard at GET / when rich options provided; legacy JSON at GET /status. */
