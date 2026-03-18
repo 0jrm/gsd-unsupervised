@@ -20,6 +20,7 @@ import { createStatusServer, readPlanningConfig } from './status-server.js';
 import { sendSms } from './notifier.js';
 import { writeGsdState } from './gsd-state.js';
 import { addTodo } from './todos-api.js';
+import { validateStateConsistency } from './state-consistency.js';
 
 let shuttingDown = false;
 
@@ -52,6 +53,27 @@ export async function runDaemon(
   config: AutopilotConfig,
   logger: Logger,
 ): Promise<void> {
+  const consistency = await validateStateConsistency(config.workspaceRoot, logger, {
+    sessionLogPath: path.isAbsolute(config.sessionLogPath)
+      ? config.sessionLogPath
+      : path.join(config.workspaceRoot, config.sessionLogPath),
+  });
+  logger.info(
+    {
+      consistent: consistency.consistent,
+      suggestedAction: consistency.suggestedAction,
+      warnings: consistency.warnings.length ? consistency.warnings : undefined,
+    },
+    'State consistency: %s',
+    consistency.suggestedAction,
+  );
+  if (consistency.suggestedAction === 'reset' && !config.autoCheckpoint) {
+    throw new Error(
+      `State inconsistent. ${consistency.warnings.join(' ')} ` +
+        'Fix STATE.md / session log / .gsd/state.json or set autoCheckpoint: true to proceed. Refusing to start.',
+    );
+  }
+
   const goals = await loadGoals(config.goalsPath, { logger });
   const pending = getPendingGoals(goals);
 
