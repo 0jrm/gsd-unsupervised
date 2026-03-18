@@ -214,6 +214,32 @@ program
     }
   });
 
+/** Send all three notification types in sequence (1s delay) to verify full SMS set. */
+program
+  .command('test-sms-all')
+  .description('Send Started, goal complete, and Crashed test SMSes in sequence (1s apart)')
+  .action(async () => {
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const goalTitle = 'Test goal';
+    try {
+      await sendSms(`[gsd] Started: ${goalTitle} — phase 1`);
+      console.log('1/3 Sent: Started');
+      await sleep(1000);
+      await sendSms(`GSD goal complete.\nGoal: ${goalTitle}`);
+      console.log('2/3 Sent: Goal complete');
+      await sleep(1000);
+      await sendSms(`[gsd] Crashed: ${goalTitle} — phase 2, plan 1. Check logs.`);
+      console.log('3/3 Sent: Crashed');
+      console.log('All three test SMSes sent. Check your phone (TWILIO_TO).');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('Failed to send test SMS:', msg);
+      console.error('');
+      console.error('Check: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM, TWILIO_TO in .env or environment.');
+      process.exit(1);
+    }
+  });
+
 export function main(): void {
   program.parse();
 }

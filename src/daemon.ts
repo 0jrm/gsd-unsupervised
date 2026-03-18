@@ -130,6 +130,11 @@ export async function runDaemon(
     setAgentSessionId: (id) => {
       currentAgentSessionId = id;
     },
+    onCrashedAfterRetries: (ctx) => {
+      sendSms(
+        `[gsd] Crashed: ${ctx.goalTitle} — phase ${ctx.phaseNumber ?? '?'}, plan ${ctx.planNumber ?? '?'}. Check logs.`,
+      ).catch((err) => logger.warn({ err }, 'SMS notification failed'));
+    },
   });
 
   const stateMdPath = path.join(config.workspaceRoot, '.planning', 'STATE.md');
@@ -437,11 +442,11 @@ export async function runDaemon(
         break;
       }
       logger.info({ goal: goal.title }, `Processing goal: ${goal.title}`);
-      try {
-        await sendSms(`GSD goal started.\nGoal: ${goal.title}`);
-      } catch (e) {
-        logger.debug({ err: e }, 'SMS (goal started) skipped or failed');
-      }
+      const phaseNum =
+        completedCount === 1 && resumeFrom !== null ? (resumeFrom.phaseNumber ?? 1) : 1;
+      sendSms(`[gsd] Started: ${goal.title} — phase ${phaseNum}`).catch((err) =>
+        logger.warn({ err }, 'SMS notification failed'),
+      );
       const isFirst = completedCount === 1 && resumeFrom !== null;
       await workspaceMutex.run(() => runOneGoal(goal, isFirst ? resumeFrom : null));
       running.delete(goal.title);

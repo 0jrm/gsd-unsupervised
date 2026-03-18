@@ -26,9 +26,17 @@ export interface CursorAgentConfig {
   retryPolicy?: RetryPolicy;
 }
 
+export interface CrashedAfterRetriesContext {
+  goalTitle: string;
+  phaseNumber?: number;
+  planNumber?: number;
+}
+
 export interface AgentInvokerCallbacks {
   /** Called when agent reports session_id (system/init); call with null when invocation ends. */
   setAgentSessionId?: (id: string | null) => void;
+  /** Called when a session log entry is written as crashed after all retries are exhausted. */
+  onCrashedAfterRetries?: (ctx: CrashedAfterRetriesContext) => void;
 }
 
 export function createCursorAgentInvoker(
@@ -162,6 +170,11 @@ export function createCursorAgentInvoker(
         durationMs,
         error: errorMsg,
       });
+      callbacks?.onCrashedAfterRetries?.({
+        goalTitle: logContext?.goalTitle ?? '',
+        phaseNumber: logContext?.phaseNumber,
+        planNumber: logContext?.planNumber,
+      });
 
       return { success: false, error: errorMsg };
     } catch (err) {
@@ -178,6 +191,11 @@ export function createCursorAgentInvoker(
           error: message,
         }),
       ).catch(() => {});
+      callbacks?.onCrashedAfterRetries?.({
+        goalTitle: logContext?.goalTitle ?? '',
+        phaseNumber: logContext?.phaseNumber,
+        planNumber: logContext?.planNumber,
+      });
 
       return { success: false, error: `Agent invocation failed: ${message}` };
     }
