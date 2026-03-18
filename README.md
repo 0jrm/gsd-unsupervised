@@ -20,6 +20,18 @@ Autonomous orchestrator that drives Cursor's headless agent through the full [GS
 - **cursor-agent** CLI (path configurable; default `agent`)
 - **CURSOR_API_KEY** — Required for live runs. Get from Cursor Dashboard → Cloud Agents → User API Keys. Not required for `--dry-run`.
 
+### Using cn (Continue CLI)
+
+You can use [Continue's headless CLI](https://docs.continue.dev/guides/cli) (`cn`) instead of Cursor as the agent:
+
+1. **Install cn**: `curl -fsSL https://raw.githubusercontent.com/continuedev/continue/main/extensions/cli/scripts/install.sh | bash` or via npm.
+2. **Config**: Fill in the `models` section in `.continue/config.yaml` (at project root). The file references GSD rules from `.cursor/rules/`; add your model (e.g. Anthropic, OpenAI) per [Continue config reference](https://docs.continue.dev/reference).
+3. **Set agent**: `--agent cn` or `"agent": "cn"` in `.planning/config.json`.
+4. **CONTINUE_API_KEY**: Required for CI/headless use. Get from [continue.dev/settings/api-keys](https://continue.dev/settings/api-keys).
+5. **Binary path**: Use `GSD_CN_BIN` env or `continueCliPath` in config if `cn` is not on PATH.
+
+cn outputs plain text (not NDJSON). GSD rules load from `.continue/config.yaml`, which references `.cursor/rules/`.
+
 ### WSL Support & Paths
 
 This project is WSL-aware and includes helpers and a diagnostics script for path resolution when running under WSL2:
@@ -132,7 +144,7 @@ Requires [ngrok](https://ngrok.com/) on your PATH and an ngrok authtoken (e.g. `
 | `--max-concurrent <n>` | `3` | Max concurrent goals when `--parallel` |
 | `--verbose` | `false` | Debug logging and pretty output |
 | `--dry-run` | `false` | Parse goals and show plan only; no agent calls |
-| `--agent <name>` | `cursor` | Agent type: `cursor`, `claude-code`, `gemini-cli`, `codex`. Invalid names fail fast. |
+| `--agent <name>` | `cursor` | Agent type: `cursor`, `cn`, `claude-code`, `gemini-cli`, `codex`. Invalid names fail fast. |
 | `--agent-path <path>` | `agent` | Path to cursor-agent binary |
 | `--agent-timeout <ms>` | `600000` | Agent invocation timeout (ms) |
 | `--status-server <port>` | — | Enable local HTTP status server: GET / = dashboard HTML, GET /status or /api/status = JSON |
@@ -140,7 +152,7 @@ Requires [ngrok](https://ngrok.com/) on your PATH and an ngrok authtoken (e.g. `
 
 ### Agent selection (`--agent`)
 
-The `--agent` flag selects which AI coding agent the orchestrator invokes. Supported values: `cursor` (default), `claude-code`, `gemini-cli`, `codex`. Invalid names fail fast at startup and do not start the daemon. Omitting the flag or using `--agent=cursor` yields identical behavior to the original Cursor-only implementation (backward compatible). Non-Cursor agents are currently stub placeholders (TODO).
+The `--agent` flag selects which AI coding agent the orchestrator invokes. Supported values: `cursor` (default), `cn` (Continue CLI), `claude-code`, `gemini-cli`, `codex`. Invalid names fail fast at startup and do not start the daemon. Omitting the flag or using `--agent=cursor` yields identical behavior to the original Cursor-only implementation (backward compatible). `cn` is a first-class agent; others are stub placeholders (TODO).
 
 ### Goals file (`goals.md`)
 
@@ -173,8 +185,9 @@ Config can come from a JSON file (`--config`) and is overridden by CLI options. 
 | `verbose` | `false` | Verbose logging |
 | `logLevel` | `"info"` | `debug` \| `info` \| `warn` \| `error` |
 | `workspaceRoot` | `process.cwd()` | Project root (for `.planning/`, etc.) |
-| `agent` | `"cursor"` | Agent type: `cursor`, `claude-code`, `gemini-cli`, `codex` |
+| `agent` | `"cursor"` | Agent type: `cursor`, `cn`, `claude-code`, `gemini-cli`, `codex` |
 | `cursorAgentPath` | `"cursor-agent"` | cursor-agent binary path |
+| `continueCliPath` | `"cn"` | cn (Continue CLI) binary path; used when `agent` is `cn` |
 | `agentTimeoutMs` | `600000` | Agent timeout (≥ 10000) |
 | `sessionLogPath` | `"./session-log.jsonl"` | Session log file |
 | `stateWatchDebounceMs` | `500` | STATE.md watcher debounce (≥ 100) |
