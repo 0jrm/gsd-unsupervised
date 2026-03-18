@@ -75,5 +75,32 @@ describe('resource-governor', () => {
     expect(elapsed).toBeGreaterThanOrEqual(50);
     vi.restoreAllMocks();
   });
+
+  it('waitForHeadroom logs memory pressure and resolves when memory mock is relaxed', async () => {
+    const logger = { debug: vi.fn(), warn: vi.fn() };
+    const totalMem = 8 * 1024 * 1024 * 1024; // 8 GB
+    const freeMemHighPressure = 0.5 * 1024 * 1024 * 1024; // 0.5 GB => ~93.75% used
+    const freeMemRelaxed = 2 * 1024 * 1024 * 1024; // 2 GB => 75% used
+    vi.spyOn(os, 'totalmem').mockReturnValue(totalMem);
+    vi.spyOn(os, 'freemem')
+      .mockReturnValueOnce(freeMemHighPressure)
+      .mockReturnValueOnce(freeMemHighPressure)
+      .mockReturnValue(freeMemRelaxed);
+    vi.spyOn(os, 'loadavg').mockReturnValue([0, 0, 0]);
+
+    await waitForHeadroom({
+      maxCpuFraction: 0.99,
+      maxMemoryFraction: 0.9,
+      pollIntervalMs: 10,
+      maxWaitMs: 500,
+      logger,
+    });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ memFraction: expect.any(Number), maxMemoryFraction: 0.9 }),
+      'memory pressure, waiting for headroom',
+    );
+    vi.restoreAllMocks();
+  });
 });
 

@@ -178,6 +178,10 @@ export async function waitForHeadroom(options: WaitForHeadroomOptions): Promise<
     'resource-governor: high system load detected, waiting for headroom',
   );
 
+  function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   while (
     (!validCpu || info.cpuFraction > (maxCpuFraction as number)) ||
     (!validMem || info.memoryFraction > (maxMemoryFraction as number)) ||
@@ -192,9 +196,22 @@ export async function waitForHeadroom(options: WaitForHeadroomOptions): Promise<
       return;
     }
 
+    const memFraction = (os.totalmem() - os.freemem()) / os.totalmem();
+    if (
+      maxMemoryFraction != null &&
+      maxMemoryFraction > 0 &&
+      maxMemoryFraction <= 1 &&
+      memFraction >= maxMemoryFraction
+    ) {
+      logger?.warn(
+        { memFraction, maxMemoryFraction },
+        'memory pressure, waiting for headroom',
+      );
+    }
+
     const remainingMs = maxWaitMs - elapsed;
     const delayMs = Math.min(pollIntervalMs, remainingMs);
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    await sleep(delayMs);
     info = await getInfo();
   }
 
