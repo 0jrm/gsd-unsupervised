@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-03-18
+
+### Summary
+
+Developer onboarding overhaul: GSD framework bundled into repo (no more local path dependencies), interactive setup.sh wizard, fixed init/run CLI commands, and updated documentation.
+
+### Added
+
+- `.gsd-framework/` — GSD workflows, templates, and references bundled into the repo. Any developer who clones can now use all GSD commands without external dependencies.
+- `setup.sh` — interactive first-run wizard (agent type, goals path, port, optional Twilio).
+- `gsd-unsupervised init` CLI command with `--agent`, `--goals`, `--port` flags for non-interactive initialization.
+
+### Fixed
+
+- All `.cursor/rules/*.mdc` files previously referenced hardcoded local paths (`/mnt/c/Users/jrm22n/...`). Replaced with repo-relative `.gsd-framework/` paths.
+- `gsd-unsupervised run` now prints an actionable error when not yet initialized instead of crashing.
+
+### Changed
+
+- README quick-start rewritten to match the setup.sh → run flow.
+- npm package now includes `.gsd-framework/` and `setup.sh`.
+
 ## [1.0.2] — 2026-03-18
 
 ### Summary
