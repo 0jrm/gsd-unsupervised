@@ -1,0 +1,24 @@
+# GSD rules for cn (Continue CLI). Fill in models section with your model.
+# See https://docs.continue.dev/reference for config format.
+# cn loads this via: cn --config .continue/config.yaml -p "..."
+
+name: GSD for cn
+version: 1.0.0
+schema: v1
+
+# Models: Add your model here. Example:
+# models:
+#   - name: Claude
+#     provider: anthropic
+#     model: claude-sonnet-4-20250514
+#     roles: [chat, edit, apply]
+
+# Rules: reference GSD rules from .cursor/rules/ (relative to project root)
+# Paths are relative to config file location; ../ goes to project root
+rules:
+  - uses: file://../.cursor/rules/gsd-system.mdc
+  - uses: file://../.cursor/rules/gsd-execute-plan.mdc
+  - uses: file://../.cursor/rules/gsd-execute-phase.mdc
+  - uses: file://../.cursor/rules/gsd-create-roadmap.mdc
+  - uses: file://../.cursor/rules/gsd-plan-phase.mdc
+  - uses: file://../.cursor/rules/gsd-help.mdc
