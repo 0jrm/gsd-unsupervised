@@ -117,6 +117,8 @@ export interface StatusServerOptions {
   gitFeedLimit?: number;
   /** When set, enables POST /api/goals, POST /api/todos, POST /webhook/twilio. */
   webhook?: WebhookOptions;
+  /** When set, POST /api/goals/intake and /api/goals/confirm require Authorization: Bearer <token>. */
+  dashboardAuthToken?: string;
   /** Optional logger for port-in-use warning when running without status server. */
   logger?: import('./logger.js').Logger;
 }
@@ -154,7 +156,8 @@ async function writePlanningConfig(path: string, config: PlanningConfig): Promis
 }
 
 /** Returns inline HTML for the dashboard (mobile-first, no build). */
-function getDashboardHtml(): string {
+function getDashboardHtml(opts?: { authRequired?: boolean }): string {
+  const authRequired = opts?.authRequired ?? false;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -190,10 +193,6 @@ function getDashboardHtml(): string {
     .toggle.on::after { transform: translateX(20px); }
     .toggle-label { font-size: 0.875rem; }
     .error-msg { font-size: 0.8125rem; color: #ef4444; margin-top: 0.25rem; }
-    .agent-list { list-style: none; margin: 0; padding: 0; }
-    .agent-list li { font-size: 0.65rem; line-height: 1.4; padding: 0.15rem 0; display: flex; align-items: center; gap: 0.35rem; }
-    .agent-list .agent-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
-    .agent-list .agent-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -201,17 +200,13 @@ function getDashboardHtml(): string {
     <header>
       <h1>GSD Autopilot</h1>
       <span class="badge" id="status-badge">—</span>
-      <span class="badge" id="agent-badge">Agent: —</span>
+      <span class="badge" id="agent-badge">0 active</span>
     </header>
     <section class="card" id="goal-card">
       <h2>Current goal</h2>
-      <p id="goal-title" style="margin:0;">—</p>
+      <p id="current-goal-title" style="margin:0;">—</p>
       <div class="progress-wrap"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
       <p id="phase-plan" style="margin:0.5rem 0 0;font-size:0.8125rem;color:var(--muted)">—</p>
-    </section>
-    <section class="card">
-      <h2>Agent sessions <span class="badge" id="agent-active-badge">0 active</span></h2>
-      <ul class="agent-list" id="agent-list"></ul>
     </section>
     <section class="card">
       <h2>Recent commits</h2>
@@ -231,7 +226,8 @@ function getDashboardHtml(): string {
     </section>
     <section id="intake" style="margin-top:2rem">
       <h2 style="font-size:1rem;font-weight:500;margin-bottom:.75rem">Add goal</h2>
-      <input id="goal-title" type="text" placeholder="What do you want to build?"
+      ${authRequired ? '<input id="auth-token" type="password" placeholder="Dashboard token (required)" style="width:100%;padding:.5rem;margin-bottom:.5rem;font-size:.875rem" title="Set GSD_DASHBOARD_TOKEN when exposing dashboard publicly">' : ''}
+      <input id="goal-input-title" type="text" placeholder="What do you want to build?"
              style="width:100%;padding:.5rem;margin-bottom:.5rem;font-size:.875rem">
       <textarea id="goal-body" placeholder="Details (optional)" rows="2"
                 style="width:100%;padding:.5rem;margin-bottom:.5rem;font-size:.875rem"></textarea>
@@ -244,7 +240,15 @@ function getDashboardHtml(): string {
     const API = '/api/status';
     const CONFIG_API = '/api/config';
     const REFRESH_MS = 10000;
-    var AGENT_COLORS = ['#22c55e','#3b82f6','#a855f7','#f59e0b','#ef4444','#06b6d4','#ec4899','#84cc16'];
+    const AUTH_REQUIRED = ${authRequired};
+
+    function authHeaders() {
+      if (!AUTH_REQUIRED) return {};
+      var el = document.getElementById('auth-token');
+      var token = el && el.value ? el.value.trim() : (sessionStorage.getItem('gsd-dashboard-token') || '');
+      if (token) sessionStorage.setItem('gsd-dashboard-token', token);
+      return token ? { 'Authorization': 'Bearer ' + token } : {};
+    }
 
     function progressPercent(snap) {
       if (!snap) return 0;
@@ -259,8 +263,10 @@ function getDashboardHtml(): string {
     function render(data) {
       document.getElementById('status-badge').textContent = data.running ? 'Running' : 'Stopped';
       document.getElementById('status-badge').className = 'badge' + (data.running ? ' running' : '');
-      document.getElementById('agent-badge').textContent = 'Agent: ' + (data.currentAgentId || '—');
-      document.getElementById('goal-title').textContent = data.currentGoal || '—';
+      var entries = data.sessionLogEntries || [];
+      var activeCount = entries.filter(function(e) { return e.status === 'running'; }).length;
+      document.getElementById('agent-badge').textContent = activeCount + ' active';
+      document.getElementById('current-goal-title').textContent = data.currentGoal || '—';
       const snap = data.stateSnapshot || null;
       const pct = progressPercent(snap);
       document.getElementById('progress-bar').style.width = pct + '%';
@@ -274,17 +280,6 @@ function getDashboardHtml(): string {
       const t = data.tokens || {};
       const cost = data.cost || {};
       document.getElementById('metrics').innerHTML = ('<span>Tokens: ' + (t.total ?? '—') + '</span><span>Cost: ' + (cost.amount != null ? cost.amount + ' ' + (cost.currency || '') : '—') + '</span>');
-      var entries = data.sessionLogEntries || [];
-      var activeCount = entries.filter(function(e) { return e.status === 'running'; }).length;
-      document.getElementById('agent-active-badge').textContent = activeCount + ' active';
-      var listEl = document.getElementById('agent-list');
-      listEl.innerHTML = entries.length
-        ? entries.map(function(e, i) {
-            var name = (e.sessionId || '').trim() ? (e.sessionId.length > 12 ? e.sessionId.slice(0, 12) + '…' : e.sessionId) : (e.goalTitle || '—');
-            var color = AGENT_COLORS[i % AGENT_COLORS.length];
-            return '<li><span class="agent-dot" style="background:' + color + '"></span><span class="agent-name" style="color:' + color + '">' + escapeHtml(name) + '</span></li>';
-          }).join('')
-        : '<li class="agent-name" style="color:var(--muted)">No sessions</li>';
     }
 
     function escapeHtml(s) {
@@ -332,10 +327,14 @@ function getDashboardHtml(): string {
       try {
         const res = await fetch('/api/goals/confirm', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
           body: JSON.stringify({ id, confirmed: true }),
         });
         const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          feedback.textContent = 'Invalid or missing token.';
+          return;
+        }
         if (data.status === 'queued') {
           feedback.textContent = 'Queued ✓';
           return;
@@ -349,7 +348,7 @@ function getDashboardHtml(): string {
     async function submitGoal() {
       const feedback = document.getElementById('goal-feedback');
       feedback.textContent = '';
-      const titleEl = document.getElementById('goal-title');
+      const titleEl = document.getElementById('goal-input-title');
       const bodyEl = document.getElementById('goal-body');
       const title = (titleEl && titleEl.value ? titleEl.value : '').trim();
       const body = (bodyEl && bodyEl.value ? bodyEl.value : '').trim();
@@ -357,15 +356,23 @@ function getDashboardHtml(): string {
         feedback.textContent = 'Please enter a goal title.';
         return;
       }
+      if (AUTH_REQUIRED && !authHeaders().Authorization) {
+        feedback.textContent = 'Dashboard token required. Enter token above.';
+        return;
+      }
 
       try {
         const res = await fetch('/api/goals/intake', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
           body: JSON.stringify({ title, body }),
         });
         const data = await res.json().catch(() => ({}));
 
+        if (res.status === 401) {
+          feedback.textContent = 'Invalid or missing token.';
+          return;
+        }
         if (data.status === 'queued') {
           feedback.textContent = 'Queued ✓';
           return;
@@ -533,8 +540,26 @@ function registerSmsWebhookRoutes(
   );
 }
 
-function registerDashboardIntakeRoutes(app: import('express').Express, webhookOptions: WebhookOptions): void {
-  app.post('/api/goals/intake', async (req: Request, res: Response) => {
+function dashboardAuthMiddleware(token: string) {
+  return (req: Request, res: Response, next: () => void) => {
+    const auth = req.headers.authorization;
+    const bearer = auth?.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+    if (bearer !== token) {
+      res.status(401).json({ status: 'unauthorized', error: 'Invalid or missing token' });
+      return;
+    }
+    next();
+  };
+}
+
+function registerDashboardIntakeRoutes(
+  app: import('express').Express,
+  webhookOptions: WebhookOptions,
+  dashboardAuthToken?: string,
+): void {
+  const auth = dashboardAuthToken ? dashboardAuthMiddleware(dashboardAuthToken) : null;
+
+  app.post('/api/goals/intake', ...(auth ? [auth] : []), async (req: Request, res: Response) => {
     const workspaceRoot = webhookOptions.workspaceRoot;
     const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
     const body = typeof req.body?.body === 'string' ? req.body.body : undefined;
@@ -579,7 +604,7 @@ function registerDashboardIntakeRoutes(app: import('express').Express, webhookOp
     });
   });
 
-  app.post('/api/goals/confirm', async (req: Request, res: Response) => {
+  app.post('/api/goals/confirm', ...(auth ? [auth] : []), async (req: Request, res: Response) => {
     const workspaceRoot = webhookOptions.workspaceRoot;
     const id = typeof req.body?.id === 'string' ? req.body.id.trim() : '';
     if (!id) {
@@ -633,7 +658,7 @@ export function createStatusApp(
   app.use(express.json());
   if (options?.webhook) {
     registerSmsWebhookRoutes(app, options.webhook, options.logger);
-    registerDashboardIntakeRoutes(app, options.webhook);
+    registerDashboardIntakeRoutes(app, options.webhook, options.dashboardAuthToken);
   }
   return app;
 }
@@ -780,13 +805,14 @@ export async function createStatusServer(
     });
 
     registerSmsWebhookRoutes(app, wh, options.logger);
-    registerDashboardIntakeRoutes(app, wh);
+    registerDashboardIntakeRoutes(app, wh, options.dashboardAuthToken);
   }
 
   /** Dashboard at GET / when rich options provided; legacy JSON at GET /status. */
   if (options) {
+    const authRequired = Boolean(options.dashboardAuthToken);
     app.get('/', (_req: Request, res: Response) => {
-      res.type('html').send(getDashboardHtml());
+      res.type('html').send(getDashboardHtml({ authRequired }));
     });
   } else {
     app.get('/', (_req: Request, res: Response) => {

@@ -80,9 +80,12 @@ export async function runDaemon(
   const goals = await loadGoals(config.goalsPath, { logger });
   const pending = getPendingGoals(goals);
 
-  if (pending.length === 0) {
+  if (pending.length === 0 && !config.statusServerPort) {
     logger.info('No pending goals in queue');
     return;
+  }
+  if (pending.length === 0 && config.statusServerPort) {
+    logger.info('No pending goals — starting dashboard-only mode (status server on port %s)', config.statusServerPort);
   }
 
   const plan = buildExecutionPlan(pending);
@@ -194,6 +197,7 @@ export async function runDaemon(
           workspaceRoot: config.workspaceRoot,
           planningConfigPath,
           webhook: webhookOptions,
+          dashboardAuthToken: process.env.GSD_DASHBOARD_TOKEN?.trim() || undefined,
           logger,
         },
       );
@@ -294,7 +298,9 @@ export async function runDaemon(
   const goalsUpdatedPath = path.join(config.workspaceRoot, '.gsd', 'goals-updated');
   const goalsReloadDebounceMs = config.goalsReloadDebounceMs ?? 500;
   let goalsReloadTimer: ReturnType<typeof setTimeout> | null = null;
-  const goalsWatcher = chokidar.watch(goalsUpdatedPath, { ignoreInitial: true });
+  const goalsWatchPaths = [goalsUpdatedPath];
+  if (config.statusServerPort) goalsWatchPaths.push(config.goalsPath);
+  const goalsWatcher = chokidar.watch(goalsWatchPaths, { ignoreInitial: true });
   goalsWatcher.on('change', () => {
     if (goalsReloadTimer) clearTimeout(goalsReloadTimer);
     const doReload = async () => {
@@ -461,7 +467,13 @@ export async function runDaemon(
       }
       const goal = queue.shift() ?? null;
       if (!goal) {
-        if (running.size === 0) break;
+        if (running.size === 0) {
+          if (config.statusServerPort) {
+            await waitForWake(30000);
+            continue;
+          }
+          break;
+        }
         await waitForWake(5000);
         continue;
       }

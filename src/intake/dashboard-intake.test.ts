@@ -62,7 +62,7 @@ describe('intake/dashboard intake', () => {
     };
   }
 
-  function mkApp() {
+  function mkApp(opts?: { dashboardAuthToken?: string }) {
     const stateMdPath = join(workspaceRoot, 'STATE.md');
     const sessionLogPath = join(workspaceRoot, 'session-log.jsonl');
     const goalsPath = join(workspaceRoot, 'goals.md');
@@ -79,6 +79,7 @@ describe('intake/dashboard intake', () => {
           getRunningTitles: () => [],
           addTodo: vi.fn(),
         },
+        dashboardAuthToken: opts?.dashboardAuthToken,
         logger: logger as any,
       } as any,
     );
@@ -173,6 +174,24 @@ describe('intake/dashboard intake', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ status: 'pending', draftSpec: 'new spec text' });
     expect(writePendingGoal).toHaveBeenCalled();
+  });
+
+  it('POST /api/goals/intake with dashboardAuthToken: 401 without token, 200 with valid token', async () => {
+    (readPendingGoals as any).mockResolvedValue([]);
+    (classifyGoal as any).mockResolvedValue({ score: 1, reasoning: 'x', suggestedQuestions: [] });
+
+    const app = mkApp({ dashboardAuthToken: 'secret123' });
+
+    const noAuth = await request(app).post('/api/goals/intake').send({ title: 'fix typo' });
+    expect(noAuth.status).toBe(401);
+    expect(noAuth.body.error).toContain('token');
+
+    const withAuth = await request(app)
+      .post('/api/goals/intake')
+      .set('Authorization', 'Bearer secret123')
+      .send({ title: 'fix typo' });
+    expect(withAuth.status).toBe(200);
+    expect(withAuth.body).toEqual({ status: 'queued', title: 'fix typo' });
   });
 });
 

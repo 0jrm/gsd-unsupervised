@@ -136,6 +136,7 @@ program
   .command('run')
   .description('Start daemon using .gsd/state.json (single source of truth)')
   .option('--state <path>', 'Path to .gsd/state.json', undefined)
+  .option('--status-server <port>', 'Override status server port (default from state)', undefined)
   .option('--verbose', 'Verbose logging', false)
   .option('--ignore-planning-config', 'Do not apply overrides from .planning/config.json', false)
   .action(async (opts) => {
@@ -165,7 +166,10 @@ program
         cliOverrides: {
           workspaceRoot,
           goalsPath,
-          statusServerPort: state.statusServerPort,
+          statusServerPort:
+            opts.statusServer != null
+              ? parseInt(opts.statusServer as string, 10)
+              : state.statusServerPort,
           statePath,
           verbose,
           ...(state.agent && { agent: state.agent as import('./config.js').AutopilotConfig['agent'] }),
