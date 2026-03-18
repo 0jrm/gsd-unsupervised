@@ -52,6 +52,21 @@ describe('roadmap-parser', () => {
       expect(dir).toBe(phaseDir);
     });
 
+    it('findPhaseDir throws when multiple directories match phase prefix', () => {
+      mkdirSync(join(phasesRoot, '04-foo'), { recursive: true });
+      mkdirSync(join(phasesRoot, '04-bar'), { recursive: true });
+      let err: Error | null = null;
+      try {
+        findPhaseDir(phasesRoot, 4);
+      } catch (e) {
+        err = e as Error;
+      }
+      expect(err).not.toBeNull();
+      expect(err!.message).toMatch(/Ambiguous phase prefix "04-"/);
+      expect(err!.message).toMatch(/04-foo/);
+      expect(err!.message).toMatch(/04-bar/);
+    });
+
     it('discoverPlans marks executed when SUMMARY exists', async () => {
       writeFileSync(join(phaseDir, '05-01-PLAN.md'), '', 'utf-8');
       writeFileSync(join(phaseDir, '05-01-SUMMARY.md'), '', 'utf-8');

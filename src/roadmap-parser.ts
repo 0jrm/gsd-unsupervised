@@ -63,6 +63,10 @@ export async function parseRoadmap(roadmapPath: string): Promise<PhaseInfo[]> {
   return phases;
 }
 
+/**
+ * Returns the single directory under phasesRoot whose name starts with the phase prefix (e.g. "04-").
+ * Throws if more than one directory matches (ambiguous phase prefix).
+ */
 export function findPhaseDir(phasesRoot: string, phaseNumber: number): string | null {
   if (!existsSync(phasesRoot)) return null;
 
@@ -76,8 +80,14 @@ export function findPhaseDir(phasesRoot: string, phaseNumber: number): string | 
     return null;
   }
 
-  const match = entries.find((name) => name.startsWith(prefix));
-  return match ? join(phasesRoot, match) : null;
+  const matches = entries.filter((name) => name.startsWith(prefix));
+  if (matches.length > 1) {
+    throw new Error(
+      `Ambiguous phase prefix "${prefix}": multiple directories match (${matches.join(', ')}). ` +
+        'Remove or rename duplicate phase directories so only one matches.',
+    );
+  }
+  return matches.length === 1 ? join(phasesRoot, matches[0]) : null;
 }
 
 export async function discoverPlans(phaseDir: string): Promise<PlanInfo[]> {
