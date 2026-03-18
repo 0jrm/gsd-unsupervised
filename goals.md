@@ -46,6 +46,22 @@
 - [ ] Complete Phase 6: Web Dashboard with SSE live feed
 - [ ] Complete Phase 7: WSL Bootstrap & Setup
 
+### Critical next steps
+- [ ] [Critical] Align `goals.md` with current roadmap: remove or mark completed any phase 4–7 items that are already shipped in code, so the daemon’s queue reflects reality.
+- [ ] [Critical] Add an end‑to‑end integration test that runs the daemon against a sample `.planning/` + `goals.md` workspace and verifies a full goal lifecycle (new → planning → executing → complete) without manual intervention.
+- [ ] [Critical] Flesh out install/usage docs for `npm` users in `README.md` (global install, local `npx`, example `config.json`, and status server usage) and link them from `goals.md`.
+- [ ] [Critical] Review and tighten default safety/config (resource governor thresholds, YOLO vs guarded mode, agent selection messaging) so a new user can’t accidentally run dangerous configs.
+
+### High‑leverage improvements
+- [ ] [High] Ship PROJECT mode end‑to‑end (multi‑workspace targeting, separate `goals.md`/state, and status server visibility) and document a realistic “manage a different repo” example.
+- [ ] [High] Add richer status server output and dashboard UX (per‑goal progress, recent events, cost placeholders, and links to logs/session history).
+- [ ] [High] Improve resume‑after‑crash UX: clearer log messages, dry‑run mode to show what would be resumed, and a simple CLI flag to force a fresh run when state is inconsistent.
+
+### Obvious wins
+- [ ] [Obvious] Clean up duplicate/obsolete items in `goals.md` (e.g., duplicate “hello world” tasks, outdated phase completion todos) so the queue stays readable.
+- [ ] [Obvious] Add a minimal “Getting Started” example folder with a toy `.planning/` + `goals.md` that users can point the daemon at to see a full run in under 5 minutes.
+- [ ] [Obvious] Wire a straightforward CI job (Node 18+, `npm test` and `npm run build`) to guard future changes.
+
 ## In Progress
 <!-- orchestrator moves goals here while running -->
 
