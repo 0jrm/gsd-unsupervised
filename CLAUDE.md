@@ -2,7 +2,7 @@
 
 Standing instructions for every agent run (daemon-invoked or manual).
 
-## GSD command reference
+## Commands
 
 | Command | Purpose |
 |---------|---------|
@@ -25,17 +25,24 @@ Standing instructions for every agent run (daemon-invoked or manual).
 ## .planning/ contract
 
 - **STATE.md** — "## Current Position" with Phase N of M, Plan N of M, Status, Progress %. Agent updates it; daemon reads for monitoring.
-- **phases/** — One dir per phase: `NN-name/`. Each plan: `NN-MM-PLAN.md`; completion: `NN-MM-SUMMARY.md`.
+- **phases/** — One dir per phase: `NN-slug/`. Each plan: `NN-MM-PLAN.md`; completion: `NN-MM-SUMMARY.md`. Optional `COMPLETE.md` marker per phase.
 - **config.json** — Workflow mode and overrides (e.g. `autoCheckpoint`, `maxConcurrent`).
 
 ## Tech stack
 
-Node 18+, TypeScript ESM, Vitest, pino, chokidar, express, zod.
+Node 18+, TypeScript ESM (`import/export`), Vitest, pino (structured logging), chokidar, Express, zod, simple-git.
 
-## Commit & quality
+## Commit format
 
-- **Format:** `{type}({phase}-{plan}): {task-name}` (e.g. `feat(04-01): state consistency validator`).
-- **Gate:** `npm test` must pass before any commit.
+`{type}({phase}-{plan}): {task-name}` (e.g. `feat(04-01): state consistency validator`). Stage files individually; never `git add -A`.
+
+## Must-do
+
+`npm test` must pass before any commit; `npm run build` before testing.
+
+## Do not
+
+Never edit `.planning/STATE.md` directly (agent owns it). Never write to `session-log.jsonl` except via `appendSessionLog`. Never hardcode paths — use `workspaceRoot` from config.
 
 ## Resource governor
 
