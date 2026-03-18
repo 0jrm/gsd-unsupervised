@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import { SUPPORTED_AGENTS } from './agent-runner.js';
+import { SUPPORTED_AGENTS, isSupportedAgent } from './agent-runner.js';
 
 export const AgentIdSchema = z.enum(SUPPORTED_AGENTS as unknown as [string, ...string[]]);
 
@@ -155,6 +155,13 @@ function readPlanningOverrides(
       overrides.maxGpuFraction = parsed.maxGpuFraction;
       logger?.debug(
         { from: '.planning/config.json', maxGpuFraction: parsed.maxGpuFraction },
+        'Planning config override applied',
+      );
+    }
+    if (typeof parsed.agent === 'string' && isSupportedAgent(parsed.agent)) {
+      overrides.agent = parsed.agent;
+      logger?.debug(
+        { from: '.planning/config.json', agent: parsed.agent },
         'Planning config override applied',
       );
     }

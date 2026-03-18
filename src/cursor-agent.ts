@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { writeFile, unlink } from 'node:fs/promises';
 import type { AgentInvoker, AgentResult } from './orchestrator.js';
@@ -220,6 +221,173 @@ export function validateCursorApiKey(): void {
   }
 }
 
+export function validateContinueApiKey(): void {
+  const key = process.env.CONTINUE_API_KEY;
+  if (!key || key.trim() === '') {
+    throw new Error(
+      'CONTINUE_API_KEY environment variable is not set or empty.\n' +
+      'Set CONTINUE_API_KEY for CI/headless use. Get from https://continue.dev/settings/api-keys',
+    );
+  }
+}
+
+export interface CnAgentConfig {
+  agentPath: string;
+  defaultTimeoutMs: number;
+  sessionLogPath: string;
+  workspaceRoot: string;
+  /** If set, write heartbeat timestamp here while agent runs (for crash detection). */
+  heartbeatPath?: string;
+  heartbeatIntervalMs?: number;
+}
+
+export function createContinueCliInvoker(
+  agentConfig: CnAgentConfig,
+  callbacks?: AgentInvokerCallbacks,
+): AgentInvoker {
+  return async (command, workspaceDir, logger, logContext): Promise<AgentResult> => {
+    const cmdString = command.args
+      ? `${command.command} ${command.args}`
+      : command.command;
+
+    const prompt =
+      'Execute in non-interactive/YOLO mode. Auto-approve all confirmations. ' +
+      'Do not ask the user any questions — make reasonable decisions autonomously.\n\n' +
+      cmdString;
+
+    logger.info({ command: cmdString }, `Invoking cn: ${cmdString}`);
+
+    const baseEntry: Omit<SessionLogEntry, 'status' | 'durationMs' | 'error'> = {
+      timestamp: new Date().toISOString(),
+      goalTitle: logContext?.goalTitle ?? '',
+      phase: command.command,
+      phaseNumber: logContext?.phaseNumber,
+      planNumber: logContext?.planNumber,
+      sessionId: null,
+      command: cmdString,
+    };
+
+    await appendSessionLog(agentConfig.sessionLogPath, {
+      ...baseEntry,
+      status: 'running',
+    });
+
+    const startMs = Date.now();
+    const heartbeatPath = agentConfig.heartbeatPath;
+    const heartbeatIntervalMs = agentConfig.heartbeatIntervalMs ?? 15_000;
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+    const stopHeartbeat = async (): Promise<void> => {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+      if (heartbeatPath) {
+        try {
+          await unlink(heartbeatPath);
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    if (heartbeatPath) {
+      const tick = (): void => {
+        writeFile(heartbeatPath!, new Date().toISOString(), 'utf-8').catch(() => {});
+      };
+      tick();
+      heartbeatTimer = setInterval(tick, heartbeatIntervalMs);
+    }
+
+    const configPath = path.join(workspaceDir, '.continue', 'config.yaml');
+    const effectiveConfigPath = existsSync(configPath) ? configPath : undefined;
+
+    try {
+      const result = await runContinueCli({
+        agentPath: agentConfig.agentPath,
+        workspace: workspaceDir,
+        prompt,
+        configPath: effectiveConfigPath,
+        timeoutMs: agentConfig.defaultTimeoutMs,
+        env: process.env.CONTINUE_API_KEY
+          ? { CONTINUE_API_KEY: process.env.CONTINUE_API_KEY }
+          : undefined,
+      });
+
+      const durationMs = Date.now() - startMs;
+      const timedOut = result.timedOut;
+
+      await stopHeartbeat();
+      callbacks?.setAgentSessionId?.(null);
+
+      if (timedOut) {
+        await appendSessionLog(agentConfig.sessionLogPath, {
+          ...baseEntry,
+          sessionId: null,
+          status: 'timeout',
+          durationMs,
+          error: `Agent timed out after ${agentConfig.defaultTimeoutMs}ms`,
+        });
+        return {
+          success: false,
+          error: `Agent timed out after ${agentConfig.defaultTimeoutMs}ms`,
+        };
+      }
+
+      if (result.exitCode === 0 && result.resultEvent) {
+        await appendSessionLog(agentConfig.sessionLogPath, {
+          ...baseEntry,
+          sessionId: null,
+          status: 'done',
+          durationMs,
+        });
+        return { success: true, output: result.resultEvent.result };
+      }
+
+      const stderrSnippet = result.stderr.slice(0, 500);
+      const errorMsg = result.resultEvent?.is_error
+        ? `Agent error: ${result.resultEvent.result}`
+        : `Agent failed (exit ${result.exitCode ?? -1})${stderrSnippet ? `: ${stderrSnippet}` : ''}`;
+
+      await appendSessionLog(agentConfig.sessionLogPath, {
+        ...baseEntry,
+        sessionId: null,
+        status: 'crashed',
+        durationMs,
+        error: errorMsg,
+      });
+      callbacks?.onCrashedAfterRetries?.({
+        goalTitle: logContext?.goalTitle ?? '',
+        phaseNumber: logContext?.phaseNumber,
+        planNumber: logContext?.planNumber,
+      });
+
+      return { success: false, error: errorMsg };
+    } catch (err) {
+      await stopHeartbeat();
+      callbacks?.setAgentSessionId?.(null);
+      const durationMs = Date.now() - startMs;
+      const message = err instanceof Error ? err.message : String(err);
+
+      void Promise.resolve(
+        appendSessionLog(agentConfig.sessionLogPath, {
+          ...baseEntry,
+          status: 'crashed',
+          durationMs,
+          error: message,
+        }),
+      ).catch(() => {});
+      callbacks?.onCrashedAfterRetries?.({
+        goalTitle: logContext?.goalTitle ?? '',
+        phaseNumber: logContext?.phaseNumber,
+        planNumber: logContext?.planNumber,
+      });
+
+      return { success: false, error: `Agent invocation failed: ${message}` };
+    }
+  };
+}
+
 export interface RunContinueCliOptions {
   agentPath: string;
   workspace: string;
@@ -370,6 +538,18 @@ export function createAgentInvoker(
           heartbeatPath: path.join(config.workspaceRoot, '.planning', 'heartbeat.txt'),
           heartbeatIntervalMs: 15_000,
           retryPolicy: config.retryPolicy,
+        },
+        callbacks,
+      );
+    case 'cn':
+      return createContinueCliInvoker(
+        {
+          agentPath: getCnBinaryPath(config),
+          defaultTimeoutMs: config.agentTimeoutMs,
+          sessionLogPath: config.sessionLogPath,
+          workspaceRoot: config.workspaceRoot,
+          heartbeatPath: path.join(config.workspaceRoot, '.planning', 'heartbeat.txt'),
+          heartbeatIntervalMs: 15_000,
         },
         callbacks,
       );

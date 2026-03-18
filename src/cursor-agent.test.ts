@@ -13,6 +13,7 @@ const baseConfig: AutopilotConfig = {
   workspaceRoot: '/tmp/test',
   agent: 'cursor',
   cursorAgentPath: '/usr/bin/cursor-agent',
+  continueCliPath: 'cn',
   agentTimeoutMs: 60_000,
   sessionLogPath: '/tmp/session-log.jsonl',
   stateWatchDebounceMs: 500,
@@ -31,6 +32,12 @@ describe('createAgentInvoker', () => {
     const invoker = createAgentInvoker('cursor', baseConfig);
     expect(invoker).toBeTypeOf('function');
     expect(invoker.length).toBe(4); // command, workspaceDir, logger, logContext
+  });
+
+  it('returns cn adapter for agent cn', () => {
+    const invoker = createAgentInvoker('cn', { ...baseConfig, agent: 'cn' });
+    expect(invoker).toBeTypeOf('function');
+    expect(invoker.length).toBe(4);
   });
 
   it('returns non-throwing stub for claude-code', async () => {

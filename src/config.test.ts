@@ -27,9 +27,14 @@ describe('config agent', () => {
     expect(config.agent).toBe('codex');
   });
 
+  it('accepts agent cn', () => {
+    const config = loadConfig({ cliOverrides: { agent: 'cn' } });
+    expect(config.agent).toBe('cn');
+  });
+
   it('rejects invalid agent with clear error', () => {
     expect(() => loadConfig({ cliOverrides: { agent: 'bogus-agent' } })).toThrow(
-      /Invalid enum value.*Expected 'cursor' \| 'claude-code' \| 'gemini-cli' \| 'codex'.*received 'bogus-agent'/,
+      /Invalid enum value.*received 'bogus-agent'/,
     );
   });
 });
