@@ -18,6 +18,7 @@ export interface SessionLogContext {
  * - command: full command string
  * - status: 'running' | 'done' | 'crashed' | 'timeout' | 'verify-failed' | 'skipped'
  * - durationMs, error: optional
+ * - failureContext: optional; populated on crashed/timeout/verify-failed for failure memory injection
  * No in-place edits; append only.
  */
 export interface SessionLogEntry {
@@ -31,6 +32,8 @@ export interface SessionLogEntry {
   status: 'running' | 'done' | 'crashed' | 'timeout' | 'verify-failed' | 'skipped';
   durationMs?: number;
   error?: string;
+  /** First 300 chars of error + plan path + phase/plan numbers; used for failure memory injection. */
+  failureContext?: string;
 }
 
 export async function appendSessionLog(logPath: string, entry: SessionLogEntry): Promise<void> {

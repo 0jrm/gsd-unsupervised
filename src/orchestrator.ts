@@ -234,6 +234,7 @@ export async function orchestrateGoal(options: {
       },
       'verify command failed after plan',
     );
+    const errSnippet = (verify.stderr ?? '').slice(0, 300);
     await appendSessionLog(sessionLogPath, {
       timestamp: new Date().toISOString(),
       goalTitle: goal.title,
@@ -244,6 +245,7 @@ export async function orchestrateGoal(options: {
       command: `/gsd/execute-plan ${planPath}`,
       status: 'verify-failed',
       error: (verify.stderr ?? '').slice(0, 500),
+      failureContext: `${planPath} phase ${phaseNum} plan ${planNumber}: ${errSnippet}`,
     });
     if (config.autoFixOnVerifyFail && onQueueFixGoal) {
       onQueueFixGoal(`Fix: verify failed after ${planPath}`, verify.stderr ?? '');

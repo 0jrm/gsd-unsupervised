@@ -14,6 +14,7 @@ import {
 import type { AgentId } from './agent-runner.js';
 import {
   appendSessionLog,
+  readSessionLog,
   type SessionLogEntry,
   type SessionLogContext,
 } from './session-log.js';
@@ -57,10 +58,28 @@ export function createCursorAgentInvoker(
       ? `${command.command} ${command.args}`
       : command.command;
 
-    const prompt =
+    let prompt =
       'Execute in non-interactive/YOLO mode. Auto-approve all confirmations. ' +
-      'Do not ask the user any questions — make reasonable decisions autonomously.\n\n' +
-      cmdString;
+      'Do not ask the user any questions — make reasonable decisions autonomously.\n\n';
+
+    const goalTitle = logContext?.goalTitle ?? '';
+    if (goalTitle && agentConfig.sessionLogPath) {
+      const entries = await readSessionLog(agentConfig.sessionLogPath);
+      const failedForGoal = entries
+        .filter((e) => e.goalTitle === goalTitle && e.status !== 'done')
+        .slice(-3)
+        .reverse();
+      if (failedForGoal.length > 0) {
+        const contextBlock = failedForGoal
+          .map(
+            (e) =>
+              `- Plan ${e.planNumber ?? '?'} failed: ${e.failureContext ?? e.error ?? 'unknown'}`,
+          )
+          .join('\n');
+        prompt += `Previous attempts context:\n${contextBlock}\n\nAvoid repeating these approaches.\n\n`;
+      }
+    }
+    prompt += cmdString;
 
     logger.info({ command: cmdString }, `Invoking cursor-agent: ${cmdString}`);
 
@@ -144,12 +163,15 @@ export function createCursorAgentInvoker(
       callbacks?.setAgentSessionId?.(null);
 
       if (timedOut) {
+        const errMsg = `Agent timed out after ${agentConfig.defaultTimeoutMs}ms`;
+        const planPath = command.command === '/gsd/execute-plan' ? command.args ?? '' : '';
         await appendSessionLog(agentConfig.sessionLogPath, {
           ...baseEntry,
           sessionId: result.sessionId,
           status: 'timeout',
           durationMs,
-          error: `Agent timed out after ${agentConfig.defaultTimeoutMs}ms`,
+          error: errMsg,
+          failureContext: `${planPath} phase ${baseEntry.phaseNumber ?? '?'} plan ${baseEntry.planNumber ?? '?'}: ${errMsg.slice(0, 300)}`,
         });
         return {
           success: false,
@@ -171,6 +193,7 @@ export function createCursorAgentInvoker(
       const errorMsg = result.resultEvent?.is_error
         ? `Agent error: ${result.resultEvent.result}`
         : `Agent failed (exit ${result.exitCode})${stderrSnippet ? `: ${stderrSnippet}` : ''}`;
+      const planPath = command.command === '/gsd/execute-plan' ? command.args ?? '' : '';
 
       await appendSessionLog(agentConfig.sessionLogPath, {
         ...baseEntry,
@@ -178,6 +201,7 @@ export function createCursorAgentInvoker(
         status: 'crashed',
         durationMs,
         error: errorMsg,
+        failureContext: `${planPath} phase ${baseEntry.phaseNumber ?? '?'} plan ${baseEntry.planNumber ?? '?'}: ${errorMsg.slice(0, 300)}`,
       });
       callbacks?.onCrashedAfterRetries?.({
         goalTitle: logContext?.goalTitle ?? '',
@@ -191,6 +215,7 @@ export function createCursorAgentInvoker(
       callbacks?.setAgentSessionId?.(null);
       const durationMs = Date.now() - startMs;
       const message = err instanceof Error ? err.message : String(err);
+      const planPath = command.command === '/gsd/execute-plan' ? command.args ?? '' : '';
 
       void Promise.resolve(
         appendSessionLog(agentConfig.sessionLogPath, {
@@ -198,6 +223,7 @@ export function createCursorAgentInvoker(
           status: 'crashed',
           durationMs,
           error: message,
+          failureContext: `${planPath} phase ${baseEntry.phaseNumber ?? '?'} plan ${baseEntry.planNumber ?? '?'}: ${message.slice(0, 300)}`,
         }),
       ).catch(() => {});
       callbacks?.onCrashedAfterRetries?.({
