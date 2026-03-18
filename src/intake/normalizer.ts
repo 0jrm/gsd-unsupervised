@@ -4,11 +4,11 @@ export function makeReceivedAtIso(): string {
   return new Date().toISOString();
 }
 
-export function normalizeCliInput(title: string, replyTo: string | undefined, projectPath: string): RawGoal {
+export function normalizeCliInput(title: string, body: string | undefined, projectPath: string): RawGoal {
   const source: IntakeSource = 'cli';
   return {
     title,
-    replyTo,
+    body,
     source,
     projectPath,
     receivedAt: makeReceivedAtIso(),

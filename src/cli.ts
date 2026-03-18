@@ -193,6 +193,31 @@ program
     await runInit();
   });
 
+/** Add a goal to an existing project with optional interactive clarification. */
+program
+  .command('add-goal <title>')
+  .description('Add a new goal to goals.md')
+  .option('--project <path>', 'Path to the target workspace/project root', process.cwd())
+  .option('--body <text>', 'Optional goal details', undefined)
+  .action(async (title: string, opts) => {
+    const { addGoalCommand } = await import('./intake/cli-commands.js');
+    await addGoalCommand({
+      title,
+      projectPath: opts.project as string,
+      body: (opts.body as string | undefined) ?? undefined,
+      replyTo: undefined,
+    });
+  });
+
+/** Interactive wizard: create project folder, init git, and queue first goal. */
+program
+  .command('new-project')
+  .description('Create a new project folder and queue the first goal')
+  .action(async () => {
+    const { newProjectCommand } = await import('./intake/cli-commands.js');
+    await newProjectCommand();
+  });
+
 /** Send a test SMS to verify Twilio config (TWILIO_* in .env or env). */
 program
   .command('test-sms')

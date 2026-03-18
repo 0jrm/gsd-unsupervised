@@ -46,6 +46,10 @@ function captureConsole() {
 describe('intake/CLI add-goal and new-project', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default successful execFile: immediately invoke callback.
+    (execFile as any).mockImplementation((_cmd: string, _args: string[], _opts: any, cb: any) => {
+      if (typeof cb === 'function') cb(null, { stdout: '' });
+    });
   });
 
   afterEach(() => {
@@ -130,7 +134,8 @@ describe('intake/CLI add-goal and new-project', () => {
     (runInit as any).mockResolvedValue(undefined);
 
     // Mock `which gh` to fail.
-    (execFile as any).mockImplementation((cmd: string, args: string[], cb: any) => {
+    (execFile as any).mockImplementation((cmd: string, args: string[], optsOrCb: any, maybeCb?: any) => {
+      const cb = typeof optsOrCb === 'function' ? optsOrCb : maybeCb;
       if (cmd === 'which' && args[0] === 'gh') {
         cb(new Error('not found'));
         return;

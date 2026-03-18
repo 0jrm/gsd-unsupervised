@@ -24,27 +24,50 @@ function askYesNo(rl: ReturnType<typeof createInterface>, question: string): Pro
   });
 }
 
-export async function runInit(): Promise<void> {
-  const cwd = process.cwd();
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
+export type NonInteractiveInitOptions = {
+  nonInteractive: true;
+  projectName: string;
+  workspaceRoot: string;
+  firstGoal?: string;
+  twilio?: boolean;
+  ngrok?: boolean;
+};
 
+export async function runInit(options?: NonInteractiveInitOptions): Promise<void> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
   console.log('\n  gsd-unsupervised init\n');
 
-  const name = await ask(rl, "? What's this project? (name) ");
-  const projectName = name || 'my-project';
+  let projectName = 'my-project';
+  let workspaceRoot = process.cwd();
+  let goalText = '- [ ] Get started with GSD';
+  let twilio = false;
+  let ngrok = false;
 
-  const repoPrompt = await ask(rl, "? Where's the repo? (path or git URL, or Enter for current dir) ");
-  const repoPath = repoPrompt || '.';
+  if (options?.nonInteractive) {
+    projectName = options.projectName;
+    workspaceRoot = options.workspaceRoot;
+    goalText = options.firstGoal ? `- [ ] ${options.firstGoal}` : '- [ ] Get started with GSD';
+    twilio = Boolean(options.twilio);
+    ngrok = Boolean(options.ngrok);
+    rl.close();
+  } else {
+    const cwd = process.cwd();
 
-  const firstGoal = await ask(rl, "? What's your first goal? (freetext) ");
-  const goalText = firstGoal ? `- [ ] ${firstGoal}` : '- [ ] Get started with GSD';
+    const name = await ask(rl, "? What's this project? (name) ");
+    projectName = name || 'my-project';
 
-  const twilio = await askYesNo(rl, '? Twilio SMS alerts? (y/n) ');
-  const ngrok = await askYesNo(rl, '? Public dashboard via ngrok? (y/n) ');
+    const repoPrompt = await ask(rl, "? Where's the repo? (path or git URL, or Enter for current dir) ");
+    const repoPath = repoPrompt || '.';
 
-  rl.close();
+    const firstGoal = await ask(rl, "? What's your first goal? (freetext) ");
+    goalText = firstGoal ? `- [ ] ${firstGoal}` : '- [ ] Get started with GSD';
 
-  const workspaceRoot = resolve(cwd, repoPath);
+    twilio = await askYesNo(rl, '? Twilio SMS alerts? (y/n) ');
+    ngrok = await askYesNo(rl, '? Public dashboard via ngrok? (y/n) ');
+
+    rl.close();
+    workspaceRoot = resolve(cwd, repoPath);
+  }
   const gsdDir = resolve(workspaceRoot, '.gsd');
   await mkdir(gsdDir, { recursive: true });
 
@@ -55,9 +78,10 @@ export async function runInit(): Promise<void> {
   } catch {
     // not this repo or no package.json
   }
+  // GSD intake/daemon hot-reload expects `goals.md` at the project root.
+  // Keep `mode` for any legacy/state consumers, but always write root `goals.md`.
   const mode: GsdMode = isSelf ? 'self' : 'project';
-
-  const goalsPath = mode === 'project' ? '.gsd/goals.md' : './goals.md';
+  const goalsPath = './goals.md';
 
   const state = {
     mode,
