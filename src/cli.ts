@@ -8,7 +8,7 @@ import { initLogger, createChildLogger } from './logger.js';
 import { loadConfig } from './config.js';
 import { loadGoals, getPendingGoals } from './goals.js';
 import { runDaemon, registerShutdownHandlers } from './daemon.js';
-import { validateCursorApiKey } from './cursor-agent.js';
+import { validateCursorApiKey, validateContinueApiKey } from './cursor-agent.js';
 import { sendSms } from './notifier.js';
 import { applyWslBootstrap } from './bootstrap/wsl-bootstrap.js';
 import { readGsdStateFromPath } from './gsd-state.js';
@@ -35,7 +35,7 @@ program
   .option('--max-concurrent <n>', 'Max concurrent projects when parallel', '3')
   .option('--verbose', 'Enable verbose/debug logging', false)
   .option('--dry-run', 'Parse goals and show plan without executing', false)
-  .option('--agent <name>', 'Agent type: cursor (default), claude-code, gemini-cli, codex', 'cursor')
+  .option('--agent <name>', 'Agent type: cursor (default), cn, claude-code, gemini-cli, codex', 'cursor')
   .option('--agent-path <path>', 'Path to cursor-agent binary', 'agent')
   .option('--agent-timeout <ms>', 'Agent invocation timeout in milliseconds', '600000')
   .option('--status-server <port>', 'Enable HTTP status server on port (GET / or /status)', undefined)
@@ -83,6 +83,15 @@ program
       if (!(opts.dryRun as boolean) && config.agent === 'cursor') {
         try {
           validateCursorApiKey();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          process.stderr.write(`Error: ${message}\n`);
+          process.exit(1);
+        }
+      }
+      if (!(opts.dryRun as boolean) && config.agent === 'cn') {
+        try {
+          validateContinueApiKey();
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           process.stderr.write(`Error: ${message}\n`);
