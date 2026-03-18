@@ -24,7 +24,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 6: Status Server** — HTTP status endpoint, daemon graceful shutdown
 - [ ] **Phase 7: WSL Bootstrap** — Setup script, path resolution (Cursor, clip.exe, WSL)
 - [x] **Phase 8: CN (Continue CLI) Support** — Add `cn` as first-class agent alongside cursor; adapter, output parsing, GSD rules compatibility
-- [ ] **Phase 9: Onboarding & Distribution** — Bundle GSD framework, setup.sh wizard, init/run CLI, launch post, npm publish
+- [x] **Phase 9: Onboarding & Distribution** — Bundle GSD framework, setup.sh wizard, init/run CLI, launch post, npm publish
 
 ## Phase Details
 
@@ -119,7 +119,7 @@ Plans:
 Plans:
 - [x] 09-01: GSD framework bundle (workflows, templates, references) and path rewrite
 - [x] 09-02: setup.sh wizard, init CLI command
-- [ ] 09-03: Launch post, version bump, CHANGELOG, publish prep
+- [x] 09-03: Launch post, version bump, CHANGELOG, publish prep
 
 ## Progress
 
@@ -136,4 +136,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 6. Status Server | 1/1 | Complete | 2026-03-17 |
 | 7. WSL Bootstrap | 2/2 | Complete | 2026-03-17 |
 | 8. CN (Continue CLI) Support | 3/3 | Complete | 2026-03-18 |
-| 9. Onboarding & Distribution | 2/3 | In progress | — |
+| 9. Onboarding & Distribution | 3/3 | Complete | 2026-03-18 |
