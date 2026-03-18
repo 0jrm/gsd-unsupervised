@@ -98,10 +98,14 @@ GOALS
   echo "  Created goals.md"
 fi
 
-# Build dist
+# Install deps and build (run in foreground so any npm prompts are visible)
 if [ -f "$ROOT/package.json" ]; then
+  (cd "$ROOT" && npm install) || true
   (cd "$ROOT" && npm run build 2>/dev/null) || true
 fi
+
+cp "$(dirname "$0")/run" "$ROOT/run"   # or: npx gsd-unsupervised run works instead
+chmod +x "$ROOT/run"
 
 echo ""
 echo "  ✓ Initialized! Next steps:"

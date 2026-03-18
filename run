@@ -39,9 +39,10 @@ if [ -f "$ROOT/package.json" ]; then
 fi
 
 # Start daemon (run command reads state and uses workspaceRoot/goals from it).
+# Pass --status-server so dashboard stays active even with empty goal queue.
 # Source .env in this shell so TWILIO_* etc. are set for the daemon (Node dotenv also loads from cwd).
 tmux new-session -d -s "$SESSION" -n daemon \
-  "cd '$ROOT' && ( set -a; [ -f .env ] && . ./.env; set +a ) && npx gsd-unsupervised run --state '$STATE' --verbose 2>&1 | tee logs/orchestrator.log; echo '--- EXITED ---'; read"
+  "cd '$ROOT' && ( set -a; [ -f .env ] && . ./.env; set +a ) && npx --yes gsd-unsupervised run --state '$STATE' --status-server $PORT --verbose 2>&1 | tee logs/orchestrator.log; echo '--- EXITED ---'; read"
 
 # Start ngrok if configured (check state or .gsd/config.json)
 USE_NGROK=false

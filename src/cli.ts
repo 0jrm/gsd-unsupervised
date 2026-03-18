@@ -9,7 +9,7 @@ import { loadConfig } from './config.js';
 import { loadGoals, getPendingGoals } from './goals.js';
 import { runDaemon, registerShutdownHandlers } from './daemon.js';
 import { validateCursorApiKey, validateContinueApiKey } from './cursor-agent.js';
-import { sendSms } from './notifier.js';
+import { sendSms, isSmsConfigured } from './notifier.js';
 import { applyWslBootstrap } from './bootstrap/wsl-bootstrap.js';
 import { readGsdStateFromPath } from './gsd-state.js';
 
@@ -252,6 +252,10 @@ program
   .description('Send a test SMS to verify Twilio credentials and delivery')
   .option('--message <text>', 'Custom message (default: GSD Autopilot test message)', undefined)
   .action(async (opts) => {
+    if (!isSmsConfigured()) {
+      console.error('Twilio not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM, TWILIO_TO in .env or environment.');
+      process.exit(1);
+    }
     const message =
       (opts.message as string | undefined)?.trim() ||
       'GSD Autopilot test SMS. If you received this, notifications are working.';
@@ -272,6 +276,10 @@ program
   .command('test-sms-all')
   .description('Send Started, goal complete, and Crashed test SMSes in sequence (1s apart)')
   .action(async () => {
+    if (!isSmsConfigured()) {
+      console.error('Twilio not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM, TWILIO_TO in .env or environment.');
+      process.exit(1);
+    }
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
     const goalTitle = 'Test goal';
     try {

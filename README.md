@@ -10,8 +10,8 @@ Autonomous orchestrator that drives Cursor's headless agent through the full [GS
 - **State monitoring** — Watches `.planning/STATE.md` for phase/plan progress and emits events (phase_advanced, plan_advanced, phase_completed, goal_completed).
 - **Crash detection & recovery** — Session log at project root, resume from exact phase/plan on next run, heartbeat for liveness.
 - **Resource governor** — CPU + memory headroom checks before each agent call so the daemon backs off instead of thrashing your box.
-- **Local status dashboard** — Optional HTTP server (`--status-server <port>`) serving an HTML dashboard and `/api/status` JSON. Use `--ngrok` to have the daemon run `ngrok http <port>` so the dashboard is reachable via a public URL while the process runs.
-- **Optional SMS (Twilio)** — Notifications for goal complete, goal failed, and daemon paused; requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `TWILIO_TO`. If unset, the daemon runs without SMS.
+- **Local status dashboard** — Optional HTTP server (`--status-server <port>`) serving an HTML dashboard and `/api/status` JSON. Use `--ngrok` to have the daemon run `ngrok http <port>` so the dashboard is reachable via a public URL while the process runs. The dashboard is most useful during long-running agent execution; if a goal completes quickly or before the server is up, the dashboard may be empty.
+- **Optional SMS (Twilio)** — Notifications for goal complete, goal failed, and daemon paused; requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `TWILIO_TO`. If unset, the daemon runs without SMS (no warnings or errors).
 
 ## Requirements
 
@@ -22,7 +22,7 @@ Node ≥ 18, tmux, and one of: Cursor, Claude Code, Continue (cn), Gemini CLI, o
 - **Node.js** ≥ 18
 - **Cursor** with GSD rules installed (e.g. in `.cursor/rules/`)
 - **cursor-agent** CLI (path configurable; default `agent`)
-- **CURSOR_API_KEY** — Required for live runs. Get from Cursor Dashboard → Cloud Agents → User API Keys. Not required for `--dry-run`.
+- **CURSOR_API_KEY** — Required for live runs. Get from Cursor Dashboard → Cloud Agents → User API Keys. Not required for `--dry-run`. **Important:** The `run` script sources `.env` from the **workspace** (the directory where you run `./run`). If you use PROJECT mode (daemon works on another repo), put `CURSOR_API_KEY` in that repo's `.env`, not in gsd-unsupervised's `.env`. Otherwise the agent may exit with code 1 and the goal will appear "complete" without doing any work.
 
 ### Using cn (Continue CLI)
 
@@ -60,9 +60,12 @@ git clone https://github.com/0jrm/gsd-unsupervised && cd gsd-unsupervised && npm
 
 # 2. Initialize in your project
 cd your-project
-./setup.sh
+./setup.sh   # runs npm install, copies run script, builds
 # or non-interactively:
 npx gsd-unsupervised init --agent cursor --goals ./goals.md
+
+# 2b. Put CURSOR_API_KEY in this project's .env (required for agent)
+echo "CURSOR_API_KEY=your_key" >> .env
 
 # 3. Add a goal
 echo "- [ ] Add dark mode to the dashboard" >> goals.md
@@ -123,7 +126,7 @@ For a deeper explanation of how WSL detection and path resolution work (and more
 npx gsd-unsupervised init --agent cursor --goals ./goals.md
 ```
 
-`setup.sh` asks: agent type, goals path, status port, optional Twilio. Writes `.gsd/state.json` and `goals.md`. Then start with `./run`.
+`setup.sh` asks: agent type, goals path, status port, optional Twilio. It runs `npm install`, builds, copies the `run` script, and writes `.gsd/state.json` and `goals.md`. Then start with `./run`. Ensure `CURSOR_API_KEY` is in the workspace's `.env` before running.
 
 ### Recommended (dashboard + public URL)
 
@@ -147,7 +150,7 @@ Extra args are passed through (e.g. `./run --parallel`).
 - **Status server** on port `4173`: open `http://localhost:4173` for the HTML dashboard.
 - **ngrok** runs `ngrok http 4173` for the same process; the public URL appears in the terminal. When the daemon exits, ngrok is stopped.
 
-Requires [ngrok](https://ngrok.com/) on your PATH and an ngrok authtoken (e.g. `ngrok config add-authtoken <token>`). Set `CURSOR_API_KEY` in your environment or in a `.env` file.
+Requires [ngrok](https://ngrok.com/) on your PATH and an ngrok authtoken (e.g. `ngrok config add-authtoken <token>`). Set `CURSOR_API_KEY` in the workspace's `.env` (the project where you run `./run`).
 
 ### Other ways to run
 
@@ -293,13 +296,15 @@ Resume uses this to re-run `execute-plan` for phase 2 plan 1 only, then continue
 - **requireCleanGitBeforePlan** (default `true`): the orchestrator refuses to run `execute-plan` when the git working tree has uncommitted changes, unless **autoCheckpoint** is `true`, in which case it creates a checkpoint commit first.
 - **How to recover manually:** (1) Inspect `session-log.jsonl` (last line = last run; `status` `crashed` or `running`). (2) Read `.planning/STATE.md` for "Current Position" (phase/plan). (3) Either run the daemon again with the same goal so it resumes automatically, or run `/gsd/execute-plan .planning/phases/<phase-dir>/<phase>-<plan>-PLAN.md` for the failed plan.
 
-**Status server and dashboard:** Use `--status-server <port>` to enable the local HTTP status server (e.g. `./bin/gsd-unsupervised --goals goals.md --status-server 4173`). Add `--ngrok` to have the daemon run `ngrok http <port>` for the same lifecycle: the public URL appears in ngrok’s output and the tunnel is closed when the daemon exits. `GET /` serves the HTML dashboard; `GET /status` returns legacy JSON; `GET /api/status` returns rich JSON including `stateSnapshot`, session log window, git feed, and `systemLoad`. `GET /api/config` and `POST /api/config` expose and update `.planning/config.json` (used for the sequential/parallel toggle).
+- **"Phase N has no unexecuted plans — skipping to complete":** Usually means the agent never ran (e.g. `CURSOR_API_KEY` missing in the workspace's `.env`). The agent exits with code 1, and the orchestrator treats it as done. Fix: ensure `CURSOR_API_KEY` is in the **workspace's** `.env` (the project where you run `./run`), not only in gsd-unsupervised's `.env`. Copy if needed: `cp ~/projects/gsd-unsupervised/.env ~/projects/your-workspace/.env`.
+
+**Status server and dashboard:** Use `--status-server <port>` to enable the local HTTP status server (e.g. `./bin/gsd-unsupervised --goals goals.md --status-server 4173`). Add `--ngrok` to have the daemon run `ngrok http <port>` for the same lifecycle: the public URL appears in ngrok’s output and the tunnel is closed when the daemon exits. `GET /` serves the HTML dashboard; `GET /status` returns legacy JSON; `GET /api/status` returns rich JSON including `stateSnapshot`, session log window, git feed, and `systemLoad`. `GET /api/config` and `POST /api/config` expose and update `.planning/config.json` (used for the sequential/parallel toggle). When exposing the dashboard publicly (e.g. via ngrok), set `GSD_DASHBOARD_TOKEN` so that adding goals requires `Authorization: Bearer <token>`.
 
 **Hot-reload and webhook:** The daemon watches `goals.md` and merges new pending goals into the queue when the file changes. With the status server running: **POST /api/goals** (JSON `{ "title": "...", "priority": 1 }`) appends to goals and enqueues; **POST /api/todos** (JSON `{ "title": "...", "area": "api" }`) creates `.planning/todos/pending/`; **POST /webhook/twilio** accepts inbound SMS (e.g. `add <goal>` or `todo <task>`) and replies with TwiML. Point your Twilio number webhook at `<ngrok-url>/webhook/twilio`.
 
 **Parallel goal pool:** With `--parallel`, a worker pool of size `--max-concurrent` is used; a per-workspace mutex keeps one goal running at a time for a single workspace (phase-level parallel inside execute-phase still applies).
 
-**SMS (Twilio):** Optional. Three message types: goal started `[gsd] Started: …`, goal complete, goal crashed `[gsd] Crashed: …`. Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, and `TWILIO_TO` in `.env`. `setup.sh` prompts for Twilio credentials when you answer `y` to SMS notifications. To verify delivery, run `npx gsd-unsupervised test-sms`.
+**SMS (Twilio):** Optional. Three message types: goal started `[gsd] Started: …`, goal complete, goal crashed `[gsd] Crashed: …`. Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, and `TWILIO_TO` in `.env`. `setup.sh` prompts for Twilio credentials when you answer `y` to SMS notifications. If Twilio vars are unset, the daemon skips SMS silently (no warnings). To verify delivery, run `npx gsd-unsupervised test-sms`.
 
 **State and heartbeat:** When started via `./run` or `gsd-unsupervised run --state .gsd/state.json`, the daemon writes to `.gsd/state.json` (PID, current goal, progress, `lastHeartbeat`). You can use `lastHeartbeat` in an external cron or script to send a periodic "alive" SMS (e.g. every 30 min) or alert if the heartbeat is stale (e.g. >10 min).
 
