@@ -92,10 +92,11 @@ Plans:
 **Depends on**: Phase 6
 **Research**: Likely (WSL path resolution, Cursor paths)
 **Research topics**: WSL path resolution, Cursor CLI paths, clip.exe on WSL
-**Plans**: 1 plan
+**Plans**: 2 plans
 
 Plans:
 - [ ] 07-01: WSL path resolution and setup script
+- [ ] 07-02: WSL bootstrap diagnostics and documentation
 
 ## Progress
 
@@ -110,4 +111,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. State Monitoring & Phase Transitions | 2/2 | Complete | 2026-03-17 |
 | 5. Crash Detection & Recovery | 2/2 | Complete | 2026-03-17 |
 | 6. Status Server | 1/1 | Complete | 2026-03-17 |
-| 7. WSL Bootstrap | 1/1 | Complete | 2026-03-17 |
+| 7. WSL Bootstrap | 2/2 | Complete | 2026-03-17 |
