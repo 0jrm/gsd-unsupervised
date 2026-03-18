@@ -21,6 +21,7 @@ import { sendSms } from './notifier.js';
 import { writeGsdState } from './gsd-state.js';
 import { addTodo } from './todos-api.js';
 import { validateStateConsistency } from './state-consistency.js';
+import { expirePendingGoals } from './intake/clarifier.js';
 
 let shuttingDown = false;
 
@@ -73,6 +74,8 @@ export async function runDaemon(
         'Fix STATE.md / session log / .gsd/state.json or set autoCheckpoint: true to proceed. Refusing to start.',
     );
   }
+
+  await expirePendingGoals(config.workspaceRoot);
 
   const goals = await loadGoals(config.goalsPath, { logger });
   const pending = getPendingGoals(goals);
@@ -288,17 +291,38 @@ export async function runDaemon(
 
   const pauseFlagPath = path.join(config.workspaceRoot, '.pause-autopilot');
 
-  const goalsWatcher = chokidar.watch(config.goalsPath, { ignoreInitial: true });
-  goalsWatcher.on('change', async () => {
-    try {
-      const fresh = await loadGoals(config.goalsPath, { logger });
-      const newPending = getPendingGoals(fresh);
-      const newPlan = buildExecutionPlan(newPending);
-      for (const g of newPlan.ordered) addToQueue(g);
-    } catch (err) {
-      logger.warn({ err, path: config.goalsPath }, 'Hot-reload goals failed');
+  const goalsUpdatedPath = path.join(config.workspaceRoot, '.gsd', 'goals-updated');
+  const goalsReloadDebounceMs = config.goalsReloadDebounceMs ?? 500;
+  let goalsReloadTimer: ReturnType<typeof setTimeout> | null = null;
+  const goalsWatcher = chokidar.watch(goalsUpdatedPath, { ignoreInitial: true });
+  goalsWatcher.on('change', () => {
+    if (goalsReloadTimer) clearTimeout(goalsReloadTimer);
+    const doReload = async () => {
+      try {
+        const fresh = await loadGoals(config.goalsPath, { logger });
+        const newPending = getPendingGoals(fresh);
+        const newPlan = buildExecutionPlan(newPending);
+        for (const g of newPlan.ordered) addToQueue(g);
+      } catch (err) {
+        logger.warn({ err, path: config.goalsPath }, 'Hot-reload goals failed');
+      }
+    };
+    if (goalsReloadDebounceMs > 0) {
+      goalsReloadTimer = setTimeout(() => {
+        goalsReloadTimer = null;
+        void doReload();
+      }, goalsReloadDebounceMs);
+    } else {
+      goalsReloadTimer = null;
+      void doReload();
     }
   });
+
+  const expireIntervalMs = 60 * 60 * 1000;
+  const expireTimer = setInterval(
+    () => expirePendingGoals(config.workspaceRoot).catch((err) => logger.warn({ err }, 'expirePendingGoals failed')),
+    expireIntervalMs,
+  );
 
   const workspaceMutex = (() => {
     let locked = false;
@@ -465,6 +489,7 @@ export async function runDaemon(
 
   await Promise.all(Array.from({ length: numWorkers }, () => runWorker()));
   goalsWatcher.close();
+  clearInterval(expireTimer);
 
   if (heartbeatTimer) {
     clearInterval(heartbeatTimer);
