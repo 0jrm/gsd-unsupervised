@@ -107,7 +107,7 @@ Plans:
 
 Plans:
 - [x] 08-01: cn adapter core (runContinueCli, parseCnOutput, config)
-- [ ] 08-02: Agent registry, createAgentInvoker, GSD rules compatibility
+- [x] 08-02: Agent registry, createAgentInvoker, GSD rules compatibility
 - [ ] 08-03: Tests and documentation
 
 ## Progress
