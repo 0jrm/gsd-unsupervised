@@ -46,8 +46,8 @@ describe('runAgentWithRetry', () => {
     expect(runFn).toHaveBeenCalledTimes(2);
     expect(logger.warn).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ attempt: 1, maxAttempts: 3, exitCode: 137 }),
-      'Agent attempt failed, retrying after backoff',
+      expect.objectContaining({ attempt: 1, maxAttempts: 3, reason: expect.any(String) }),
+      'agent invocation failed, retrying',
     );
   });
 

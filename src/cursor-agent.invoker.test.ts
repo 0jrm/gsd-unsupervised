@@ -19,7 +19,13 @@ vi.mock('./agent-runner.js', async () => {
   const actual = await vi.importActual<typeof import('./agent-runner.js')>('./agent-runner.js');
   return {
     ...actual,
-    runAgent: (...args: any[]) => runAgentMock(...args),
+    runAgent: (...args: unknown[]) => runAgentMock(...args),
+    runAgentWithRetry: async (
+      options: import('./agent-runner.js').RunAgentOptions,
+      _policy: import('./agent-runner.js').RetryPolicy,
+      _logger: import('./logger.js').Logger,
+      runFn?: (opts: import('./agent-runner.js').RunAgentOptions) => Promise<import('./agent-runner.js').RunAgentResult>,
+    ) => (runFn ? runFn(options) : runAgentMock(options)),
   };
 });
 

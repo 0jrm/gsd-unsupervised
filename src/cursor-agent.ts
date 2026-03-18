@@ -2,7 +2,7 @@ import path from 'node:path';
 import { writeFile, unlink } from 'node:fs/promises';
 import type { AgentInvoker, AgentResult } from './orchestrator.js';
 import type { Logger } from './logger.js';
-import { runAgent, runAgentWithRetry, type RetryPolicy } from './agent-runner.js';
+import { runAgentWithRetry, DEFAULT_RETRY_POLICY, type RetryPolicy } from './agent-runner.js';
 import type { AgentId } from './agent-runner.js';
 import {
   appendSessionLog,
@@ -117,13 +117,8 @@ export function createCursorAgentInvoker(
     };
 
     try {
-      const result = agentConfig.retryPolicy
-        ? await runAgentWithRetry(runOptions, agentConfig.retryPolicy, logger)
-        : await runAgent({
-            ...runOptions,
-            maxRetries: 2,
-            retryDelayMs: 5000,
-          });
+      const policy = agentConfig.retryPolicy ?? DEFAULT_RETRY_POLICY;
+      const result = await runAgentWithRetry(runOptions, policy, logger);
 
       const durationMs = Date.now() - startMs;
       const timedOut = result.timedOut;
@@ -175,12 +170,14 @@ export function createCursorAgentInvoker(
       const durationMs = Date.now() - startMs;
       const message = err instanceof Error ? err.message : String(err);
 
-      await appendSessionLog(agentConfig.sessionLogPath, {
-        ...baseEntry,
-        status: 'crashed',
-        durationMs,
-        error: message,
-      }).catch(() => {});
+      void Promise.resolve(
+        appendSessionLog(agentConfig.sessionLogPath, {
+          ...baseEntry,
+          status: 'crashed',
+          durationMs,
+          error: message,
+        }),
+      ).catch(() => {});
 
       return { success: false, error: `Agent invocation failed: ${message}` };
     }

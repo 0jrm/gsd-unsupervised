@@ -19,6 +19,12 @@ export interface RetryPolicy {
   nonRetryableExitCodes: number[];
 }
 
+export const DEFAULT_RETRY_POLICY: RetryPolicy = {
+  maxAttempts: 3,
+  backoffMs: [5000, 30000, 120000],
+  nonRetryableExitCodes: [1, 127],
+};
+
 export const SUPPORTED_AGENTS: readonly AgentId[] = [
   'cursor',
   'claude-code',
@@ -215,9 +221,10 @@ export async function runAgentWithRetry(
     if (done || attempt >= maxAttempts) break;
 
     const delay = backoffMs[Math.min(attempt - 1, backoffMs.length - 1)] ?? backoffMs[backoffMs.length - 1];
+    const reason = lastResult.stderr?.slice(0, 500) || `exit ${lastResult.exitCode}`;
     logger.warn(
-      { attempt, maxAttempts, backoffMs: delay, exitCode },
-      'Agent attempt failed, retrying after backoff',
+      { attempt, maxAttempts, backoffMs: delay, reason },
+      'agent invocation failed, retrying',
     );
     await sleep(delay);
   }
