@@ -12,6 +12,13 @@ import {
 /** Supported agent IDs for the pluggable invoker seam. */
 export type AgentId = 'cursor' | 'claude-code' | 'gemini-cli' | 'codex';
 
+/** Policy for retrying agent runs with backoff and non-retryable exit codes. */
+export interface RetryPolicy {
+  maxAttempts: number;
+  backoffMs: number[];
+  nonRetryableExitCodes: number[];
+}
+
 export const SUPPORTED_AGENTS: readonly AgentId[] = [
   'cursor',
   'claude-code',
@@ -176,6 +183,43 @@ export async function runAgent(options: RunAgentOptions): Promise<RunAgentResult
       'Agent attempt failed, retrying',
     );
     await sleep(retryDelayMs);
+  }
+
+  return lastResult!;
+}
+
+/**
+ * Runs the agent with retry policy: backoff between attempts, no retry on non-retryable exit codes.
+ * Uses runAgent with maxRetries: 0 for a single attempt per outer attempt.
+ * @param runFn - Optional single-attempt runner (for tests); defaults to runAgent with maxRetries: 0.
+ */
+export async function runAgentWithRetry(
+  options: RunAgentOptions,
+  policy: RetryPolicy,
+  logger: import('./logger.js').Logger,
+  runFn?: (opts: RunAgentOptions) => Promise<RunAgentResult>,
+): Promise<RunAgentResult> {
+  const { maxAttempts, backoffMs, nonRetryableExitCodes } = policy;
+  const runOnce = runFn ?? ((opts: RunAgentOptions) => runAgent({ ...opts, maxRetries: 0, logger: opts.logger }));
+  let lastResult: RunAgentResult | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    lastResult = await runOnce({ ...options, logger });
+
+    const exitCode = lastResult.exitCode ?? -1;
+    const done =
+      lastResult.exitCode === 0 ||
+      lastResult.timedOut ||
+      nonRetryableExitCodes.includes(exitCode);
+
+    if (done || attempt >= maxAttempts) break;
+
+    const delay = backoffMs[Math.min(attempt - 1, backoffMs.length - 1)] ?? backoffMs[backoffMs.length - 1];
+    logger.warn(
+      { attempt, maxAttempts, backoffMs: delay, exitCode },
+      'Agent attempt failed, retrying after backoff',
+    );
+    await sleep(delay);
   }
 
   return lastResult!;

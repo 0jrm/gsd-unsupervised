@@ -42,6 +42,18 @@ export const AutopilotConfigSchema = z.object({
   ngrok: z.boolean().default(false),
   /** When set, daemon writes PID, progress, lastHeartbeat to this state file (.gsd/state.json). */
   statePath: z.string().optional(),
+  /** Retry policy for agent runs. When set, runAgentWithRetry is used. */
+  retryPolicy: z
+    .object({
+      maxAttempts: z.number().int().min(1).max(10),
+      backoffMs: z.array(z.number().int().min(0)),
+      nonRetryableExitCodes: z.array(z.number().int()),
+    })
+    .default({
+      maxAttempts: 3,
+      backoffMs: [5000, 30000, 120000],
+      nonRetryableExitCodes: [1, 127],
+    }),
 });
 
 export type AutopilotConfig = z.infer<typeof AutopilotConfigSchema>;

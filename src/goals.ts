@@ -1,4 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
+import { validateGoalsFile, parseGoalsFile } from './goals-parser.js';
 
 export interface Goal {
   title: string;
@@ -16,91 +17,35 @@ export interface Goal {
   metadataBlock?: string;
 }
 
-/** A line that was skipped during parsing (not a checkbox goal). */
-export interface ParseWarning {
-  lineNumber: number;
-  line: string;
-  reason: string;
-}
-
-type GoalStatus = Goal['status'];
-
-const SECTION_MAP: Record<string, GoalStatus> = {
-  '## pending': 'pending',
-  '## in progress': 'in_progress',
-  '## done': 'done',
-};
-
-/** Only lines matching this are treated as executable goals. */
-const CHECKBOX_RE = /^- \[([ xX])\]\s+(.+)$/;
+/** Re-export for tests that assert on parse warnings. */
+export type { ParseWarning } from './goals-parser.js';
+import type { ParsedGoal } from './goals-parser.js';
 
 export interface ParseGoalsResult {
   goals: Goal[];
-  warnings: ParseWarning[];
+  warnings: import('./goals-parser.js').ParseWarning[];
+}
+
+function mapParsedToGoals(parsed: ParsedGoal[]): Goal[] {
+  return parsed.map((p) => {
+    const withAnnotations = applyAnnotations({
+      title: p.title,
+      status: p.status,
+      raw: p.raw,
+    });
+    return {
+      ...withAnnotations,
+      metadataBlock: p.description ? `### ${p.title}\n${p.description}` : undefined,
+    };
+  });
 }
 
 /**
- * Strict parser: only lines matching `- [ ]` or `- [x]` are goals. Section headers (## pending, etc.)
- * set current section. All other non-blank lines in a section are recorded as ParseWarning.
- * A `###` line immediately following a checkbox goal is attached to that goal as metadataBlock.
+ * Strict parser: delegates to goals-parser; returns goals and warnings for tests.
  */
 export function parseGoals(markdown: string): ParseGoalsResult {
-  const normalized = markdown.replace(/\r\n/g, '\n');
-  const lines = normalized.split('\n');
-  const goals: Goal[] = [];
-  const warnings: ParseWarning[] = [];
-  let currentStatus: GoalStatus | null = null;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const lineNumber = i + 1;
-    const trimmed = line.trim();
-    const lower = trimmed.toLowerCase();
-
-    if (SECTION_MAP[lower] !== undefined) {
-      currentStatus = SECTION_MAP[lower];
-      continue;
-    }
-
-    if (trimmed === '') continue;
-
-    if (currentStatus === null) {
-      warnings.push({
-        lineNumber,
-        line: trimmed,
-        reason: 'outside any section (## Pending, ## In Progress, ## Done); skipped',
-      });
-      continue;
-    }
-
-    const match = trimmed.match(CHECKBOX_RE);
-    if (match) {
-      const title = match[2].trim();
-      const annotated = applyAnnotations({
-        title,
-        status: currentStatus,
-        raw: trimmed,
-      });
-      // Peek next line for ### metadata block
-      if (i + 1 < lines.length) {
-        const next = lines[i + 1].trim();
-        if (next.startsWith('###')) {
-          annotated.metadataBlock = next;
-          i++; // consume the ### line so we don't warn on it
-        }
-      }
-      goals.push(annotated);
-      continue;
-    }
-
-    warnings.push({
-      lineNumber,
-      line: trimmed,
-      reason: 'not a checkbox line (- [ ] or - [x]); skipped',
-    });
-  }
-
-  return { goals, warnings };
+  const { goals: parsed, warnings } = parseGoalsFile(markdown);
+  return { goals: mapParsedToGoals(parsed), warnings };
 }
 
 export interface LoadGoalsOptions {
@@ -112,9 +57,9 @@ export async function loadGoals(
   filePath: string,
   options?: LoadGoalsOptions,
 ): Promise<Goal[]> {
-  let content: string;
+  let parsed;
   try {
-    content = await readFile(filePath, 'utf-8');
+    parsed = await validateGoalsFile(filePath);
   } catch (err: unknown) {
     if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
       throw new Error(`Goals file not found: ${filePath}`);
@@ -122,21 +67,18 @@ export async function loadGoals(
     throw err;
   }
 
-  if (content.trim().length === 0) return [];
+  if (parsed.goals.length === 0) return [];
 
-  const { goals, warnings } = parseGoals(content);
-
-  const logWarn = options?.logger ? (msg: string) => options.logger!.warn(msg) : (msg: string) => console.warn(msg);
-  for (const w of warnings) {
+  const goals = mapParsedToGoals(parsed.goals);
+  const logWarn = options?.logger ? (msg: string) => options.logger!.warn(msg) : () => {};
+  for (const w of parsed.warnings) {
     logWarn(
       `goals.md:${w.lineNumber} skipped: ${w.reason} — "${w.line.slice(0, 60)}${w.line.length > 60 ? '...' : ''}"`,
     );
   }
-
   if (getPendingGoals(goals).length === 0) {
     logWarn(`Warning: no pending goals found in ${filePath}`);
   }
-
   return goals;
 }
 

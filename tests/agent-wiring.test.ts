@@ -71,6 +71,7 @@ describe('agent wiring', () => {
     expect(createAgentInvokerSpy).toHaveBeenCalledWith(
       'claude-code',
       expect.objectContaining({ workspaceRoot: workspace }),
+      expect.any(Object),
     );
   });
 
@@ -102,6 +103,7 @@ describe('agent wiring', () => {
     expect(createAgentInvokerSpy).toHaveBeenCalledWith(
       'cursor',
       expect.objectContaining({ workspaceRoot: workspace }),
+      expect.any(Object),
     );
   });
 
@@ -128,6 +130,10 @@ describe('agent wiring', () => {
       logger,
     );
 
-    expect(createAgentInvokerSpy).toHaveBeenCalledWith('claude-code', expect.any(Object));
+    expect(createAgentInvokerSpy).toHaveBeenCalledWith(
+      'claude-code',
+      expect.any(Object),
+      expect.any(Object),
+    );
   });
 });

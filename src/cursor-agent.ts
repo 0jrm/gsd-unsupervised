@@ -2,7 +2,7 @@ import path from 'node:path';
 import { writeFile, unlink } from 'node:fs/promises';
 import type { AgentInvoker, AgentResult } from './orchestrator.js';
 import type { Logger } from './logger.js';
-import { runAgent } from './agent-runner.js';
+import { runAgent, runAgentWithRetry, type RetryPolicy } from './agent-runner.js';
 import type { AgentId } from './agent-runner.js';
 import {
   appendSessionLog,
@@ -22,6 +22,8 @@ export interface CursorAgentConfig {
   /** If set, write heartbeat timestamp here while agent runs (for crash detection). */
   heartbeatPath?: string;
   heartbeatIntervalMs?: number;
+  /** If set, use runAgentWithRetry with this policy. */
+  retryPolicy?: RetryPolicy;
 }
 
 export interface AgentInvokerCallbacks {
@@ -87,19 +89,16 @@ export function createCursorAgentInvoker(
       heartbeatTimer = setInterval(tick, heartbeatIntervalMs);
     }
 
-    try {
-      const result = await runAgent({
-        agentPath: agentConfig.agentPath,
-        workspace: workspaceDir,
-        prompt,
-        env: process.env.CURSOR_API_KEY
-          ? { CURSOR_API_KEY: process.env.CURSOR_API_KEY }
-          : undefined,
-        timeoutMs: agentConfig.defaultTimeoutMs,
-        maxRetries: 2,
-        retryDelayMs: 5000,
-        logger,
-        onEvent: (event: CursorStreamEvent) => {
+    const runOptions = {
+      agentPath: agentConfig.agentPath,
+      workspace: workspaceDir,
+      prompt,
+      env: process.env.CURSOR_API_KEY
+        ? { CURSOR_API_KEY: process.env.CURSOR_API_KEY }
+        : undefined,
+      timeoutMs: agentConfig.defaultTimeoutMs,
+      logger,
+      onEvent: (event: CursorStreamEvent) => {
           if (event.type === 'system' && event.subtype === 'init') {
             logger.info({ sessionId: event.session_id }, 'Agent session started');
             callbacks?.setAgentSessionId?.(event.session_id);
@@ -115,7 +114,16 @@ export function createCursorAgentInvoker(
             );
           }
         },
-      });
+    };
+
+    try {
+      const result = agentConfig.retryPolicy
+        ? await runAgentWithRetry(runOptions, agentConfig.retryPolicy, logger)
+        : await runAgent({
+            ...runOptions,
+            maxRetries: 2,
+            retryDelayMs: 5000,
+          });
 
       const durationMs = Date.now() - startMs;
       const timedOut = result.timedOut;
@@ -204,6 +212,7 @@ export function createAgentInvoker(
           sessionLogPath: config.sessionLogPath,
           heartbeatPath: path.join(config.workspaceRoot, '.planning', 'heartbeat.txt'),
           heartbeatIntervalMs: 15_000,
+          retryPolicy: config.retryPolicy,
         },
         callbacks,
       );
