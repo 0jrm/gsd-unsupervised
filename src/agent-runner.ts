@@ -32,6 +32,12 @@ export interface RunAgentOptions {
   model?: string;
   resumeId?: string;
   onEvent?: (event: CursorStreamEvent) => void;
+  /** Max retries on retriable failure (default 2). Total attempts = maxRetries + 1. */
+  maxRetries?: number;
+  /** Delay in ms before retry (default 5000). */
+  retryDelayMs?: number;
+  /** Optional logger for retry warnings. */
+  logger?: import('./logger.js').Logger;
 }
 
 export interface RunAgentResult {
@@ -43,7 +49,24 @@ export interface RunAgentResult {
   stderr: string;
 }
 
-export function runAgent(options: RunAgentOptions): Promise<RunAgentResult> {
+/** True if the failure is likely transient (timeout, crash without result). */
+function isRetriableFailure(result: RunAgentResult): boolean {
+  if (result.timedOut) return true;
+  if (result.exitCode !== 0 && result.resultEvent == null) return true;
+  if (result.exitCode !== 0 && result.resultEvent?.is_error && !(result.resultEvent.result?.trim())) return true;
+  return false;
+}
+
+/** Reason string for logging. */
+function retryReason(result: RunAgentResult): string {
+  if (result.timedOut) return 'timeout';
+  if (result.exitCode !== 0 && result.resultEvent == null) return 'non-zero exit without result event';
+  if (result.resultEvent?.is_error && !(result.resultEvent.result?.trim())) return 'error event without result message';
+  return 'unknown';
+}
+
+/** Single attempt: no retries. */
+function runAgentOnce(options: RunAgentOptions): Promise<RunAgentResult> {
   const { agentPath, workspace, prompt, env, timeoutMs, model, resumeId, onEvent } = options;
 
   const args = [
@@ -130,6 +153,32 @@ export function runAgent(options: RunAgentOptions): Promise<RunAgentResult> {
       });
     });
   });
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+export async function runAgent(options: RunAgentOptions): Promise<RunAgentResult> {
+  const maxRetries = options.maxRetries ?? 2;
+  const retryDelayMs = options.retryDelayMs ?? 5000;
+  const logger = options.logger;
+
+  let lastResult: RunAgentResult | null = null;
+  const totalAttempts = maxRetries + 1;
+
+  for (let attempt = 1; attempt <= totalAttempts; attempt++) {
+    lastResult = await runAgentOnce(options);
+    const retriable = isRetriableFailure(lastResult);
+    if (!retriable || attempt >= totalAttempts) break;
+    logger?.warn(
+      { attempt, maxRetries, reason: retryReason(lastResult) },
+      'Agent attempt failed, retrying',
+    );
+    await sleep(retryDelayMs);
+  }
+
+  return lastResult!;
 }
 
 export async function abortAgent(child: ChildProcess): Promise<void> {

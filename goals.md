@@ -1,16 +1,28 @@
 # GSD Autopilot Goals Queue
 
+**Implementation reference:** See [docs/architecture_redesign.md](docs/architecture_redesign.md) for the original systematic review and directed instructions — process stability, resume-pointer consolidation, goals schema, lifecycle state machine, agent retry/backoff, and config overrides. Use it when implementing hardening and reliability work.
+
+## Next 48h (see .planning/OPPORTUNITY.md)
+- [ ] Publish gsd-unsupervised to npm
+- [ ] Wire SMS for goal started + goal crashed (goal complete already sent)
+- [ ] Write launch blog post ("daemon that runs my AI agent overnight"), link npm + paid tier
+
 ## Pending
+- [ ] Add `./run` as the canonical entry point: reads .gsd/state.json, loads .env, starts daemon + ngrok + tmux, resumes previous state
+- [ ] Add `npx gsd-unsupervised init` onboarding wizard: collects project name, goals path, Twilio config, writes .gsd/state.json and .env
+- [ ] Implement .gsd/state.json as single source of truth: daemon writes PID, current goal, progress, ngrokUrl, lastHeartbeat on every state change
+- [ ] Add PROJECT mode: daemon can target a different workspaceRoot than its own repo, with separate goals.md and state.json
 - [ ] Complete Phase 4: State Monitoring & Phase Transitions — execute plans 04-02 and 04-03
 - [ ] Complete Phase 5: Crash Detection & Recovery
 - [ ] 5-crash-detection-recovery
-- Debug & fix STATE.md not updating during GSD lifecycle
+- [ ] Debug & fix STATE.md not updating during GSD lifecycle
 - [ ] Add recursive subagent support: daemon can spawn cursor-agent subprocess for complex plans, subagent can spawn further specialist agents. Use existing invocation pattern: cursor-agent --workspace <path> "<prompt>". Wire into orchestrator as an optional execution mode per plan.
 - [ ] Add GPU guard to resource-governor (maxGpuFraction + gpuLoadCommand, surfaced in /api/status)
 - [ ] Tighten agent support messaging (Cursor as v1.0 default; clearly mark other agents as experimental)
 - [ ] Publish gsd-unsupervised v1.0.0 to npm and document npm-based install/usage
+- [ ] Cost tracking per goal: token count (from result event or estimate), cost estimate; surface in /api/status and dashboard (placeholders exist)
 
-- Build WhatsApp command/chat interface for autopilot
+- [ ] Build WhatsApp command/chat interface for autopilot
   ### WhatsApp command interface
   **Goal:** Allow sending commands ("status", "pause", "resume", "logs last 10", "stop daemon", "restart") via WhatsApp and get replies (status summary, dashboard link, logs snippet).
   **Success criteria:**

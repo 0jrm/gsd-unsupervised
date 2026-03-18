@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import http from 'node:http';
 import express, { type Request, type Response } from 'express';
 import { appendPendingGoal } from './goals.js';
 
@@ -37,6 +38,8 @@ export interface StatusPayload {
   phaseNumber?: number;
   planNumber?: number;
   heartbeat?: string;
+  /** Live agent session ID while an agent is running (from daemon). */
+  currentAgentId?: string | null;
 }
 
 /** Dashboard-oriented rich payload for GET /api/status. */
@@ -108,6 +111,8 @@ export interface StatusServerOptions {
   gitFeedLimit?: number;
   /** When set, enables POST /api/goals, POST /api/todos, POST /webhook/twilio. */
   webhook?: WebhookOptions;
+  /** Optional logger for port-in-use warning when running without status server. */
+  logger?: import('./logger.js').Logger;
 }
 
 const DEFAULT_PLANNING_CONFIG: PlanningConfig = {
@@ -179,6 +184,10 @@ function getDashboardHtml(): string {
     .toggle.on::after { transform: translateX(20px); }
     .toggle-label { font-size: 0.875rem; }
     .error-msg { font-size: 0.8125rem; color: #ef4444; margin-top: 0.25rem; }
+    .agent-list { list-style: none; margin: 0; padding: 0; }
+    .agent-list li { font-size: 0.65rem; line-height: 1.4; padding: 0.15rem 0; display: flex; align-items: center; gap: 0.35rem; }
+    .agent-list .agent-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+    .agent-list .agent-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -193,6 +202,10 @@ function getDashboardHtml(): string {
       <p id="goal-title" style="margin:0;">—</p>
       <div class="progress-wrap"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
       <p id="phase-plan" style="margin:0.5rem 0 0;font-size:0.8125rem;color:var(--muted)">—</p>
+    </section>
+    <section class="card">
+      <h2>Agent sessions <span class="badge" id="agent-active-badge">0 active</span></h2>
+      <ul class="agent-list" id="agent-list"></ul>
     </section>
     <section class="card">
       <h2>Recent commits</h2>
@@ -215,14 +228,25 @@ function getDashboardHtml(): string {
     const API = '/api/status';
     const CONFIG_API = '/api/config';
     const REFRESH_MS = 10000;
+    var AGENT_COLORS = ['#22c55e','#3b82f6','#a855f7','#f59e0b','#ef4444','#06b6d4','#ec4899','#84cc16'];
 
+    function progressPercent(snap) {
+      if (!snap) return 0;
+      if (snap.progressPercent != null) return snap.progressPercent;
+      if (snap.totalPhases < 1) return 0;
+      var phaseProgress = (snap.phaseNumber - 1) / snap.totalPhases;
+      var planProgress = snap.totalPlans > 0
+        ? (snap.planNumber / snap.totalPlans) / snap.totalPhases
+        : 0;
+      return Math.round((phaseProgress + planProgress) * 100);
+    }
     function render(data) {
       document.getElementById('status-badge').textContent = data.running ? 'Running' : 'Stopped';
       document.getElementById('status-badge').className = 'badge' + (data.running ? ' running' : '');
       document.getElementById('agent-badge').textContent = 'Agent: ' + (data.currentAgentId || '—');
       document.getElementById('goal-title').textContent = data.currentGoal || '—';
       const snap = data.stateSnapshot || null;
-      const pct = snap && snap.progressPercent != null ? snap.progressPercent : 0;
+      const pct = progressPercent(snap);
       document.getElementById('progress-bar').style.width = pct + '%';
       document.getElementById('phase-plan').textContent = snap
         ? 'Phase ' + snap.phaseNumber + '/' + snap.totalPhases + ' · Plan ' + snap.planNumber + '/' + snap.totalPlans + ' — ' + snap.status
@@ -234,6 +258,17 @@ function getDashboardHtml(): string {
       const t = data.tokens || {};
       const cost = data.cost || {};
       document.getElementById('metrics').innerHTML = ('<span>Tokens: ' + (t.total ?? '—') + '</span><span>Cost: ' + (cost.amount != null ? cost.amount + ' ' + (cost.currency || '') : '—') + '</span>');
+      var entries = data.sessionLogEntries || [];
+      var activeCount = entries.filter(function(e) { return e.status === 'running'; }).length;
+      document.getElementById('agent-active-badge').textContent = activeCount + ' active';
+      var listEl = document.getElementById('agent-list');
+      listEl.innerHTML = entries.length
+        ? entries.map(function(e, i) {
+            var name = (e.sessionId || '').trim() ? (e.sessionId.length > 12 ? e.sessionId.slice(0, 12) + '…' : e.sessionId) : (e.goalTitle || '—');
+            var color = AGENT_COLORS[i % AGENT_COLORS.length];
+            return '<li><span class="agent-dot" style="background:' + color + '"></span><span class="agent-name" style="color:' + color + '">' + escapeHtml(name) + '</span></li>';
+          }).join('')
+        : '<li class="agent-name" style="color:var(--muted)">No sessions</li>';
     }
 
     function escapeHtml(s) {
@@ -284,18 +319,24 @@ function getDashboardHtml(): string {
 </html>`;
 }
 
+export interface CreateStatusServerResult {
+  server: import('node:http').Server | null;
+  close: () => Promise<void>;
+}
+
 /**
- * Creates an Express-based HTTP server that serves:
+ * Creates and starts an Express-based HTTP server. Resolves when listening or when port is in use (non-fatal).
  * - GET /: dashboard HTML (when options are provided) or legacy JSON.
  * - GET /status: legacy JSON status (same shape as before).
  * - GET /api/status: rich dashboard JSON (agent, goal, phase/plan, state snapshot, session log window, git feed, token/cost placeholders).
  * When options are provided, / serves the dashboard and /api/status is enabled; otherwise / and /status return legacy JSON.
+ * On EADDRINUSE, returns { server: null, close: no-op } and does not throw; other server errors are thrown.
  */
-export function createStatusServer(
+export async function createStatusServer(
   port: number,
   getStatus: () => StatusPayload,
   options?: StatusServerOptions,
-): { server: import('node:http').Server; close: () => Promise<void> } {
+): Promise<CreateStatusServerResult> {
   const app = express();
   const sessionLogLimit = options?.sessionLogLimit ?? 20;
   const gitFeedLimit = options?.gitFeedLimit ?? 10;
@@ -487,7 +528,7 @@ export function createStatusServer(
       }));
       payload.gitFeed = gitFeed;
       const lastEntry = sessionLogEntries[0];
-      if (lastEntry) {
+      if (payload.currentAgentId == null && lastEntry) {
         payload.currentAgentId = lastEntry.sessionId;
       }
     }
@@ -495,12 +536,30 @@ export function createStatusServer(
     res.json(payload);
   });
 
-  const server = app.listen(port);
+  const server = http.createServer(app);
 
-  const close = (): Promise<void> =>
-    new Promise((resolve, reject) => {
-      server.close((err) => (err ? reject(err) : resolve()));
+  const result = await new Promise<CreateStatusServerResult>((resolve, reject) => {
+    server.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        options?.logger?.warn(
+          { port },
+          'Status server port in use — running without status server',
+        );
+        resolve({ server: null, close: async () => {} });
+      } else {
+        reject(err);
+      }
     });
+    server.listen(port, () => {
+      resolve({
+        server,
+        close: (): Promise<void> =>
+          new Promise((res, rej) => {
+            server.close((e) => (e ? rej(e) : res()));
+          }),
+      });
+    });
+  });
 
-  return { server, close };
+  return result;
 }

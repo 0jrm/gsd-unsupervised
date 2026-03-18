@@ -7,9 +7,9 @@ function getEnv(name: string): string {
 }
 
 /**
- * Twilio SMS outbound only.
- * Reads TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM, TWILIO_TO from process.env.
- * Single POST to Twilio Messages API.
+ * Twilio SMS outbound only (alerts on goal complete/fail/pause).
+ * No inbound SMS or webhook: adding goals or todos via SMS is not implemented.
+ * Reads TWILIO_* from process.env; single POST to Twilio Messages API.
  */
 export async function sendSms(message: string): Promise<void> {
   const accountSid = getEnv('TWILIO_ACCOUNT_SID');

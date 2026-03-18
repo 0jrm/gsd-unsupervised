@@ -13,26 +13,19 @@ describe('status-server', () => {
   });
 
   async function listen(server: import('node:http').Server): Promise<number> {
-    await new Promise<void>((resolve, reject) => {
-      server.once('listening', resolve);
-      server.once('error', reject);
-    });
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('Expected port binding');
-    return address.port;
+    return (address as import('node:net').AddressInfo).port;
   }
 
   it('serves GET /status with JSON', async () => {
     const payload = { running: true, currentGoal: 'Test' };
-    const { server, close: c } = createStatusServer(port, () => payload);
-    close = c;
-    await new Promise<void>((resolve, reject) => {
-      server.once('listening', resolve);
-      server.once('error', reject);
-    });
-    const address = server.address();
+    const result = await createStatusServer(port, () => payload);
+    expect(result.server).not.toBeNull();
+    close = result.close;
+    const address = result.server!.address();
     if (!address || typeof address === 'string') throw new Error('Expected port binding');
-    const url = `http://127.0.0.1:${address.port}/status`;
+    const url = `http://127.0.0.1:${(address as import('node:net').AddressInfo).port}/status`;
     const res = await fetch(url);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('application/json');
@@ -42,15 +35,12 @@ describe('status-server', () => {
 
   it('serves GET / with same JSON', async () => {
     const payload = { running: false };
-    const { server, close: c } = createStatusServer(port, () => payload);
-    close = c;
-    await new Promise<void>((resolve, reject) => {
-      server.once('listening', resolve);
-      server.once('error', reject);
-    });
-    const address = server.address();
+    const result = await createStatusServer(port, () => payload);
+    expect(result.server).not.toBeNull();
+    close = result.close;
+    const address = result.server!.address();
     if (!address || typeof address === 'string') throw new Error('Expected port binding');
-    const url = `http://127.0.0.1:${address.port}/`;
+    const url = `http://127.0.0.1:${(address as import('node:net').AddressInfo).port}/`;
     const res = await fetch(url);
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -58,33 +48,27 @@ describe('status-server', () => {
   });
 
   it('returns 404 for other paths', async () => {
-    const { server, close: c } = createStatusServer(port, () => ({ running: false }));
-    close = c;
-    await new Promise<void>((resolve, reject) => {
-      server.once('listening', resolve);
-      server.once('error', reject);
-    });
-    const address = server.address();
+    const result = await createStatusServer(port, () => ({ running: false }));
+    expect(result.server).not.toBeNull();
+    close = result.close;
+    const address = result.server!.address();
     if (!address || typeof address === 'string') throw new Error('Expected port binding');
-    const res = await fetch(`http://127.0.0.1:${address.port}/other`);
+    const res = await fetch(`http://127.0.0.1:${(address as import('node:net').AddressInfo).port}/other`);
     expect(res.status).toBe(404);
   });
 
   it('serves GET / as dashboard HTML when options provided', async () => {
     const payload = { running: true, currentGoal: 'Goal' };
-    const { server, close: c } = createStatusServer(port, () => payload, {
+    const result = await createStatusServer(port, () => payload, {
       stateMdPath: '/nonexistent/STATE.md',
       sessionLogPath: '/nonexistent/session-log.jsonl',
       workspaceRoot: process.cwd(),
     });
-    close = c;
-    await new Promise<void>((resolve, reject) => {
-      server.once('listening', resolve);
-      server.once('error', reject);
-    });
-    const address = server.address();
+    expect(result.server).not.toBeNull();
+    close = result.close;
+    const address = result.server!.address();
     if (!address || typeof address === 'string') throw new Error('Expected port binding');
-    const res = await fetch(`http://127.0.0.1:${address.port}/`);
+    const res = await fetch(`http://127.0.0.1:${(address as import('node:net').AddressInfo).port}/`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('text/html');
     const html = await res.text();
@@ -95,19 +79,16 @@ describe('status-server', () => {
 
   it('serves GET /status with JSON even when options provided', async () => {
     const payload = { running: true, currentGoal: 'Goal' };
-    const { server, close: c } = createStatusServer(port, () => payload, {
+    const result = await createStatusServer(port, () => payload, {
       stateMdPath: '/nonexistent/STATE.md',
       sessionLogPath: '/nonexistent/session-log.jsonl',
       workspaceRoot: process.cwd(),
     });
-    close = c;
-    await new Promise<void>((resolve, reject) => {
-      server.once('listening', resolve);
-      server.once('error', reject);
-    });
-    const address = server.address();
+    expect(result.server).not.toBeNull();
+    close = result.close;
+    const address = result.server!.address();
     if (!address || typeof address === 'string') throw new Error('Expected port binding');
-    const res = await fetch(`http://127.0.0.1:${address.port}/status`);
+    const res = await fetch(`http://127.0.0.1:${(address as import('node:net').AddressInfo).port}/status`);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body).toEqual(payload);
@@ -115,19 +96,16 @@ describe('status-server', () => {
 
   it('serves GET /api/status with rich dashboard JSON when options provided', async () => {
     const payload = { running: true, currentGoal: 'Goal', phaseNumber: 6, planNumber: 2 };
-    const { server, close: c } = createStatusServer(port, () => payload, {
+    const result = await createStatusServer(port, () => payload, {
       stateMdPath: '/nonexistent/STATE.md',
       sessionLogPath: '/nonexistent/session-log.jsonl',
       workspaceRoot: process.cwd(),
     });
-    close = c;
-    await new Promise<void>((resolve, reject) => {
-      server.once('listening', resolve);
-      server.once('error', reject);
-    });
-    const address = server.address();
+    expect(result.server).not.toBeNull();
+    close = result.close;
+    const address = result.server!.address();
     if (!address || typeof address === 'string') throw new Error('Expected port binding');
-    const res = await fetch(`http://127.0.0.1:${address.port}/api/status`);
+    const res = await fetch(`http://127.0.0.1:${(address as import('node:net').AddressInfo).port}/api/status`);
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toContain('application/json');
     const body = await res.json();
@@ -149,14 +127,15 @@ describe('status-server', () => {
       JSON.stringify({ parallelization: { enabled: false } }),
       'utf-8',
     );
-    const { server, close: c } = createStatusServer(port, () => ({ running: false }), {
+    const result = await createStatusServer(port, () => ({ running: false }), {
       stateMdPath: '/n/s.md',
       sessionLogPath: '/n/s.jsonl',
       workspaceRoot: process.cwd(),
       planningConfigPath: configPath,
     });
-    close = c;
-    const p = await listen(server);
+    expect(result.server).not.toBeNull();
+    close = result.close;
+    const p = await listen(result.server!);
     const res = await fetch(`http://127.0.0.1:${p}/api/config`);
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -173,14 +152,15 @@ describe('status-server', () => {
       JSON.stringify({ parallelization: { enabled: false } }),
       'utf-8',
     );
-    const { server, close: c } = createStatusServer(port, () => ({ running: false }), {
+    const result = await createStatusServer(port, () => ({ running: false }), {
       stateMdPath: '/n/s.md',
       sessionLogPath: '/n/s.jsonl',
       workspaceRoot: process.cwd(),
       planningConfigPath: configPath,
     });
-    close = c;
-    const p = await listen(server);
+    expect(result.server).not.toBeNull();
+    close = result.close;
+    const p = await listen(result.server!);
     const postRes = await fetch(`http://127.0.0.1:${p}/api/config`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -199,14 +179,15 @@ describe('status-server', () => {
     const dir = mkdtempSync(join(tmpdir(), 'status-server-config-'));
     const configPath = join(dir, 'config.json');
     writeFileSync(configPath, JSON.stringify({}), 'utf-8');
-    const { server, close: c } = createStatusServer(port, () => ({ running: false }), {
+    const result = await createStatusServer(port, () => ({ running: false }), {
       stateMdPath: '/n/s.md',
       sessionLogPath: '/n/s.jsonl',
       workspaceRoot: process.cwd(),
       planningConfigPath: configPath,
     });
-    close = c;
-    const p = await listen(server);
+    expect(result.server).not.toBeNull();
+    close = result.close;
+    const p = await listen(result.server!);
     const res = await fetch(`http://127.0.0.1:${p}/api/config`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -214,5 +195,21 @@ describe('status-server', () => {
     });
     expect(res.status).toBe(400);
     rmSync(dir, { recursive: true });
+  });
+
+  it('degrades gracefully when port is already in use (EADDRINUSE)', async () => {
+    const payload = { running: true, currentGoal: 'First' };
+    const first = await createStatusServer(0, () => payload);
+    expect(first.server).not.toBeNull();
+    close = first.close;
+    const usedPort = (first.server!.address() as import('node:net').AddressInfo).port;
+    const second = await createStatusServer(usedPort, () => ({ running: false }), {
+      stateMdPath: '/n/s.md',
+      sessionLogPath: '/n/s.jsonl',
+      workspaceRoot: process.cwd(),
+    });
+    expect(second.server).toBeNull();
+    await first.close();
+    close = async () => {};
   });
 });

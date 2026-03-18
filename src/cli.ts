@@ -40,6 +40,7 @@ program
   .option('--agent-timeout <ms>', 'Agent invocation timeout in milliseconds', '600000')
   .option('--status-server <port>', 'Enable HTTP status server on port (GET / or /status)', undefined)
   .option('--ngrok', 'Start ngrok tunnel to status server port (use with --status-server)', false)
+  .option('--ignore-planning-config', 'Do not apply overrides from .planning/config.json', false)
   .action(async (opts) => {
     const verbose = opts.verbose as boolean;
     const logger = initLogger({
@@ -62,6 +63,8 @@ program
           statusServerPort: opts.statusServer ? parseInt(opts.statusServer as string, 10) : undefined,
           ngrok: opts.ngrok as boolean,
         },
+        ignorePlanningConfig: opts.ignorePlanningConfig as boolean,
+        logger: log,
       });
 
       log.debug({ config }, 'Configuration loaded');
@@ -88,7 +91,7 @@ program
       }
 
       if (opts.dryRun as boolean) {
-        const goals = await loadGoals(config.goalsPath);
+        const goals = await loadGoals(config.goalsPath, { logger: log });
         const pending = getPendingGoals(goals);
 
         console.log('\n  Goals Queue Summary');
@@ -125,6 +128,7 @@ program
   .description('Start daemon using .gsd/state.json (single source of truth)')
   .option('--state <path>', 'Path to .gsd/state.json', undefined)
   .option('--verbose', 'Verbose logging', false)
+  .option('--ignore-planning-config', 'Do not apply overrides from .planning/config.json', false)
   .action(async (opts) => {
     const cwd = process.cwd();
     const statePath = opts.state
@@ -156,6 +160,8 @@ program
           statePath,
           verbose,
         },
+        ignorePlanningConfig: opts.ignorePlanningConfig as boolean,
+        logger: log,
       });
       log.info(
         { mode: state.mode, project: state.project, goalsPath: config.goalsPath },

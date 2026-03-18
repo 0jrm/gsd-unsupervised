@@ -22,7 +22,7 @@ import {
 import { isWorkingTreeClean, createCheckpoint } from './git.js';
 import { readStateFile } from './state-index.js';
 import type { StateSnapshot } from './state-types.js';
-import type { ResumeFrom } from './session-log.js';
+import type { ResumePointer } from './resume-pointer.js';
 import { sendSms } from './notifier.js';
 import { waitForHeadroom } from './resource-governor.js';
 
@@ -150,7 +150,7 @@ export async function orchestrateGoal(options: {
   isShuttingDown: () => boolean;
   onProgress?: (snapshot: StateSnapshot) => void;
   /** When set, orchestrator will resume from this phase/plan (used in 05-03). */
-  resumeFrom?: ResumeFrom | null;
+  resumeFrom?: ResumePointer | null;
   /**
    * Hint to skip re-running /gsd/plan-phase for phases before this 1-based phase index.
    * Plans will still be discovered/executed for skipped phases.

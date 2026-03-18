@@ -4,4 +4,4 @@ dist/
 .planning/heartbeat.txt
 session-log.jsonl
 .env
-.env
+.gsd/

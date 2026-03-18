@@ -153,6 +153,7 @@ describe('agent-runner spawn contract', () => {
       workspace: '/w',
       prompt: 'hello',
       timeoutMs: 10,
+      maxRetries: 0,
     });
 
     await vi.advanceTimersByTimeAsync(10);
@@ -163,6 +164,57 @@ describe('agent-runner spawn contract', () => {
 
     expect(result.timedOut).toBe(true);
     expect(treeKillMock).toHaveBeenCalled();
+  });
+
+  it('retries on retriable failure (non-zero exit, no result event) and respects retry delay', async () => {
+    vi.useFakeTimers();
+    const failChild = createMockChildProcess();
+    const successChild = createMockChildProcess();
+    spawnMock
+      .mockReturnValueOnce(failChild as unknown as ReturnType<SpawnFn>)
+      .mockReturnValueOnce(successChild as unknown as ReturnType<SpawnFn>);
+
+    const retryDelayMs = 5000;
+    const promise = runAgent({
+      agentPath: 'cursor-agent',
+      workspace: '/w',
+      prompt: 'hello',
+      timeoutMs: 0,
+      maxRetries: 1,
+      retryDelayMs,
+    });
+
+    failChild.emit('close', 1);
+    await vi.advanceTimersByTimeAsync(retryDelayMs);
+    successChild.emit('close', 0);
+
+    const result = await promise;
+    expect(result.exitCode).toBe(0);
+    expect(spawnMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops retrying after maxRetries and returns last result', async () => {
+    const child = createMockChildProcess();
+    spawnMock.mockReturnValue(child as unknown as ReturnType<SpawnFn>);
+
+    const promise = runAgent({
+      agentPath: 'cursor-agent',
+      workspace: '/w',
+      prompt: 'hello',
+      timeoutMs: 0,
+      maxRetries: 2,
+      retryDelayMs: 10,
+    });
+
+    child.emit('close', 1);
+    await new Promise((r) => setTimeout(r, 15));
+    child.emit('close', 1);
+    await new Promise((r) => setTimeout(r, 15));
+    child.emit('close', 1);
+
+    const result = await promise;
+    expect(result.exitCode).toBe(1);
+    expect(spawnMock).toHaveBeenCalledTimes(3);
   });
 });
 

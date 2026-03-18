@@ -1,6 +1,6 @@
 {
   "name": "gsd-unsupervised",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Autonomous orchestrator for Cursor agent + GSD framework",
   "type": "module",
   "main": "dist/cli.js",

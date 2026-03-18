@@ -7,7 +7,6 @@ import {
   readSessionLog,
   inspectForCrashedSessions,
   getLastRunningSession,
-  computeResumePoint,
   type SessionLogEntry,
 } from './session-log.js';
 
@@ -137,41 +136,4 @@ describe('session-log', () => {
     });
   });
 
-  describe('computeResumePoint', () => {
-    it('returns null for empty log', async () => {
-      const got = await computeResumePoint(logPath, workspaceRoot, 'My Goal');
-      expect(got).toBeNull();
-    });
-
-    it('returns null when goal title mismatch', async () => {
-      await appendSessionLog(logPath, entry('crashed', { goalTitle: 'Other Goal' }));
-      const got = await computeResumePoint(logPath, workspaceRoot, 'My Goal');
-      expect(got).toBeNull();
-    });
-
-    it('returns ResumeFrom based on first missing SUMMARY file', async () => {
-      // ROADMAP: one phase, incomplete
-      writeFileSync(
-        join(workspaceRoot, '.planning', 'ROADMAP.md'),
-        '- [ ] **Phase 1: Alpha** — Test phase\n',
-        'utf-8',
-      );
-      const phaseDir = join(workspaceRoot, '.planning', 'phases', '01-alpha');
-      mkdirSync(phaseDir, { recursive: true });
-      // Plan 1 executed, plan 2 not executed
-      writeFileSync(join(phaseDir, '01-01-PLAN.md'), '# Plan 1\n', 'utf-8');
-      writeFileSync(join(phaseDir, '01-01-SUMMARY.md'), '# Summary 1\n', 'utf-8');
-      writeFileSync(join(phaseDir, '01-02-PLAN.md'), '# Plan 2\n', 'utf-8');
-
-      await appendSessionLog(logPath, entry('crashed', { goalTitle: 'My Goal' }));
-      const got = await computeResumePoint(logPath, workspaceRoot, 'My Goal');
-      expect(got).toEqual({ phaseNumber: 1, planNumber: 2 });
-    });
-
-    it('returns null when firstPendingGoalTitle is empty', async () => {
-      await appendSessionLog(logPath, entry('crashed', { goalTitle: 'My Goal' }));
-      const got = await computeResumePoint(logPath, workspaceRoot, '');
-      expect(got).toBeNull();
-    });
-  });
 });

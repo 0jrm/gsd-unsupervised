@@ -49,8 +49,12 @@ export type AutopilotConfig = z.infer<typeof AutopilotConfigSchema>;
 export function loadConfig(options: {
   configPath?: string;
   cliOverrides?: Partial<AutopilotConfig>;
+  /** When true, do not read .planning/config.json for overrides. */
+  ignorePlanningConfig?: boolean;
+  /** Optional logger to log each planning override applied (debug level). */
+  logger?: import('./logger.js').Logger;
 }): AutopilotConfig {
-  const { configPath, cliOverrides } = options;
+  const { configPath, cliOverrides, ignorePlanningConfig, logger } = options;
 
   let fileValues: Record<string, unknown> = {};
   if (configPath && existsSync(configPath)) {
@@ -65,7 +69,9 @@ export function loadConfig(options: {
 
   // `.planning/config.json` is primarily for GSD framework behavior, but we also
   // allow it to override a small set of daemon runtime flags (e.g. autoCheckpoint).
-  const planningOverrides = readPlanningOverrides(workspaceRoot);
+  const planningOverrides = ignorePlanningConfig
+    ? {}
+    : readPlanningOverrides(workspaceRoot, logger);
 
   const merged = {
     ...fileValues,
@@ -90,7 +96,10 @@ function stripUndefined(obj: Record<string, unknown>): Record<string, unknown> {
   );
 }
 
-function readPlanningOverrides(workspaceRoot: string): Partial<AutopilotConfig> {
+function readPlanningOverrides(
+  workspaceRoot: string,
+  logger?: import('./logger.js').Logger,
+): Partial<AutopilotConfig> {
   try {
     const planningPath = path.join(workspaceRoot, '.planning', 'config.json');
     if (!existsSync(planningPath)) return {};
@@ -100,18 +109,38 @@ function readPlanningOverrides(workspaceRoot: string): Partial<AutopilotConfig> 
     const overrides: Partial<AutopilotConfig> = {};
     if (typeof parsed.autoCheckpoint === 'boolean') {
       overrides.autoCheckpoint = parsed.autoCheckpoint;
+      logger?.debug(
+        { from: '.planning/config.json', autoCheckpoint: parsed.autoCheckpoint },
+        'Planning config override applied',
+      );
     }
     if (typeof parsed.maxConcurrent === 'number') {
       overrides.maxConcurrent = parsed.maxConcurrent;
+      logger?.debug(
+        { from: '.planning/config.json', maxConcurrent: parsed.maxConcurrent },
+        'Planning config override applied',
+      );
     }
     if (typeof parsed.maxCpuFraction === 'number') {
       overrides.maxCpuFraction = parsed.maxCpuFraction;
+      logger?.debug(
+        { from: '.planning/config.json', maxCpuFraction: parsed.maxCpuFraction },
+        'Planning config override applied',
+      );
     }
     if (typeof parsed.maxMemoryFraction === 'number') {
       overrides.maxMemoryFraction = parsed.maxMemoryFraction;
+      logger?.debug(
+        { from: '.planning/config.json', maxMemoryFraction: parsed.maxMemoryFraction },
+        'Planning config override applied',
+      );
     }
     if (typeof parsed.maxGpuFraction === 'number') {
       overrides.maxGpuFraction = parsed.maxGpuFraction;
+      logger?.debug(
+        { from: '.planning/config.json', maxGpuFraction: parsed.maxGpuFraction },
+        'Planning config override applied',
+      );
     }
     return overrides;
   } catch {

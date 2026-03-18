@@ -24,7 +24,15 @@ export interface CursorAgentConfig {
   heartbeatIntervalMs?: number;
 }
 
-export function createCursorAgentInvoker(agentConfig: CursorAgentConfig): AgentInvoker {
+export interface AgentInvokerCallbacks {
+  /** Called when agent reports session_id (system/init); call with null when invocation ends. */
+  setAgentSessionId?: (id: string | null) => void;
+}
+
+export function createCursorAgentInvoker(
+  agentConfig: CursorAgentConfig,
+  callbacks?: AgentInvokerCallbacks,
+): AgentInvoker {
   return async (command, workspaceDir, logger, logContext): Promise<AgentResult> => {
     const cmdString = command.args
       ? `${command.command} ${command.args}`
@@ -88,9 +96,13 @@ export function createCursorAgentInvoker(agentConfig: CursorAgentConfig): AgentI
           ? { CURSOR_API_KEY: process.env.CURSOR_API_KEY }
           : undefined,
         timeoutMs: agentConfig.defaultTimeoutMs,
+        maxRetries: 2,
+        retryDelayMs: 5000,
+        logger,
         onEvent: (event: CursorStreamEvent) => {
           if (event.type === 'system' && event.subtype === 'init') {
             logger.info({ sessionId: event.session_id }, 'Agent session started');
+            callbacks?.setAgentSessionId?.(event.session_id);
           } else if (event.type === 'tool_call') {
             logger.debug(
               { toolName: event.tool_call.name, callId: event.call_id },
@@ -109,6 +121,7 @@ export function createCursorAgentInvoker(agentConfig: CursorAgentConfig): AgentI
       const timedOut = result.timedOut;
 
       await stopHeartbeat();
+      callbacks?.setAgentSessionId?.(null);
 
       if (timedOut) {
         await appendSessionLog(agentConfig.sessionLogPath, {
@@ -150,6 +163,7 @@ export function createCursorAgentInvoker(agentConfig: CursorAgentConfig): AgentI
       return { success: false, error: errorMsg };
     } catch (err) {
       await stopHeartbeat();
+      callbacks?.setAgentSessionId?.(null);
       const durationMs = Date.now() - startMs;
       const message = err instanceof Error ? err.message : String(err);
 
@@ -179,16 +193,20 @@ export function validateCursorApiKey(): void {
 export function createAgentInvoker(
   agentId: AgentId,
   config: AutopilotConfig,
+  callbacks?: AgentInvokerCallbacks,
 ): AgentInvoker {
   switch (agentId) {
     case 'cursor':
-      return createCursorAgentInvoker({
-        agentPath: getCursorBinaryPath(config),
-        defaultTimeoutMs: config.agentTimeoutMs,
-        sessionLogPath: config.sessionLogPath,
-        heartbeatPath: path.join(config.workspaceRoot, '.planning', 'heartbeat.txt'),
-        heartbeatIntervalMs: 15_000,
-      });
+      return createCursorAgentInvoker(
+        {
+          agentPath: getCursorBinaryPath(config),
+          defaultTimeoutMs: config.agentTimeoutMs,
+          sessionLogPath: config.sessionLogPath,
+          heartbeatPath: path.join(config.workspaceRoot, '.planning', 'heartbeat.txt'),
+          heartbeatIntervalMs: 15_000,
+        },
+        callbacks,
+      );
     case 'claude-code':
     case 'gemini-cli':
     case 'codex': {

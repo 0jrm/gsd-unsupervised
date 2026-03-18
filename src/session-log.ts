@@ -1,7 +1,5 @@
 import { readFile, appendFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import path from 'node:path';
-import { parseRoadmap, findPhaseDir, discoverPlans, getNextUnexecutedPlan } from './roadmap-parser.js';
 
 /** Context passed when invoking the agent for session log entries (goal/phase/plan). */
 export interface SessionLogContext {
@@ -95,43 +93,4 @@ export async function inspectForCrashedSessions(
   if (entries.length === 0) return null;
   const last = entries[entries.length - 1];
   return last.status === 'running' || last.status === 'crashed' ? last : null;
-}
-
-/** Resume position for crash recovery; only when unambiguous. */
-export interface ResumeFrom {
-  phaseNumber: number;
-  planNumber: number;
-}
-
-/**
- * Computes a deterministic resume point when the last session was crashed or running.
- * Returns null on ambiguity (empty log, goal mismatch, or missing phase/plan).
- * Derives resume point from SUMMARY file existence via roadmap-parser, not from STATE.md.
- */
-export async function computeResumePoint(
-  sessionLogPath: string,
-  workspaceRoot: string,
-  firstPendingGoalTitle: string,
-): Promise<ResumeFrom | null> {
-  const entry = await inspectForCrashedSessions(sessionLogPath);
-  const goalTrim = firstPendingGoalTitle.trim();
-  if (!entry || !goalTrim) return null;
-  if (entry.goalTitle.trim() !== goalTrim) return null;
-
-  const roadmapPath = path.join(workspaceRoot, '.planning', 'ROADMAP.md');
-  const phasesRoot = path.join(workspaceRoot, '.planning', 'phases');
-
-  const phases = await parseRoadmap(roadmapPath);
-  for (let i = 0; i < phases.length; i++) {
-    const phase = phases[i];
-    const phaseDir = findPhaseDir(phasesRoot, phase.number);
-    if (!phaseDir) continue;
-    const plans = await discoverPlans(phaseDir);
-    const next = getNextUnexecutedPlan(plans);
-    if (next) {
-      return { phaseNumber: i + 1, planNumber: next.planNumber };
-    }
-  }
-
-  return null;
 }
