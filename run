@@ -13,7 +13,7 @@ fi
 
 # First run?
 if [ ! -f "$STATE" ]; then
-  echo "No state found. Run: npx gsd-unsupervised init"
+  echo "Not initialized. Run ./setup.sh or npx gsd-unsupervised init"
   exit 1
 fi
 

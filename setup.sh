@@ -1,258 +1,112 @@
 #!/usr/bin/env bash
+# setup.sh — interactive first-run wizard for gsd-unsupervised
+#
+# Root cause of broken init flow (discovery from 09-02 Task 1):
+# - init command EXISTS in src/cli.ts and delegates to init-wizard.ts
+# - init-wizard writes .gsd/state.json with: mode, project, workspaceRoot, goalsPath, statusServerPort
+# - run script expects: mode, statusServerPort, goalsPath (node -e reads from state)
+# - run command in cli.ts reads state via readGsdStateFromPath, uses workspaceRoot, goalsPath
+# - The init wizard asks different questions (project name, repo path, first goal, twilio, ngrok)
+#   and doesn't expose agent type or port. setup.sh provides simpler 3-question flow + agent choice.
+#
 set -euo pipefail
 
-# GSD Autopilot — WSL bootstrap script (Phase 7)
-# Detects WSL2, resolves Windows .cursor path, syncs GSD rules into the repo.
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+STATE="$ROOT/.gsd/state.json"
+GOALS="$ROOT/goals.md"
 
-log() { printf '%s\n' "$*"; }
-err() { printf '%s\n' "$*" >&2; }
+# Already initialized?
+if [ -f "$STATE" ]; then
+  echo "Already initialized. Edit .gsd/state.json to change settings."
+  exit 0
+fi
 
-REPO_ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+echo ""
+echo "  gsd-unsupervised setup"
+echo ""
 
-# --- Modes: --dry-run/--check (no changes), --validate (bootstrap + checks + smoke), default = bootstrap ---
-MODE="bootstrap"
-SMOKE_TEST=""
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --dry-run|--check) MODE="dry-run"; shift ;;
-    --validate)        MODE="validate"; shift ;;
-    --smoke-test)      SMOKE_TEST="1"; shift ;;
-    -h|--help)
-      log "Usage: $0 [--dry-run | --check | --validate] [--smoke-test]"
-      log "  --dry-run, --check  Print detection and planned actions only (no copy)."
-      log "  --validate         Bootstrap then run post-condition checks and optional smoke test."
-      log "  --smoke-test       With --validate, run orchestrator smoke test (node/npm + install + test)."
-      log "  (no args)          Full bootstrap: detect, resolve, sync GSD rules."
-      exit 0
-      ;;
-    *)
-      err "Usage: $0 [--dry-run | --check | --validate] [--smoke-test]"
-      exit 1
-      ;;
-  esac
-done
+# 1. Agent type
+printf "  Agent type [cursor]: "
+read -r AGENT
+AGENT="${AGENT:-cursor}"
 
-# --- Task 1: WSL2 and environment detection ---
-detect_wsl() {
-  local osrelease
-  if [[ ! -f /proc/sys/kernel/osrelease ]]; then
-    err "Not running under WSL: /proc/sys/kernel/osrelease not found."
-    return 1
-  fi
-  osrelease=$(cat /proc/sys/kernel/osrelease 2>/dev/null || true)
-  if [[ ! "$osrelease" =~ [Mm]icrosoft-standard-WSL2 ]]; then
-    err "This script requires WSL2. Detected: $osrelease"
-    err "Install WSL2 or run this script inside a WSL2 environment."
-    return 1
-  fi
-  return 0
+# 2. Goals file path
+printf "  Goals file path [./goals.md]: "
+read -r GOALS_PATH
+GOALS_PATH="${GOALS_PATH:-./goals.md}"
+
+# 3. Status server port
+printf "  Status server port [3000]: "
+read -r PORT
+PORT="${PORT:-3000}"
+
+# 4. Twilio (optional)
+printf "  Twilio SMS notifications? (y/N): "
+read -r TWILIO
+TWILIO="${TWILIO:-n}"
+
+mkdir -p "$ROOT/.gsd"
+
+# Write .gsd/state.json (run script expects: mode, statusServerPort, goalsPath)
+NOW="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+cat > "$STATE" << EOF
+{
+  "mode": "self",
+  "project": "gsd-unsupervised",
+  "agent": "$AGENT",
+  "goalsPath": "$GOALS_PATH",
+  "statusServerPort": $PORT,
+  "workspaceRoot": ".",
+  "createdAt": "$NOW"
 }
+EOF
 
-check_mnt_c() {
-  if [[ ! -d /mnt/c ]] || [[ ! -r /mnt/c ]]; then
-    err "Windows C: drive not available at /mnt/c."
-    err "Ensure WSL has access to the Windows filesystem (e.g. wsl --mount)."
-    return 1
+# Twilio credentials to .env
+if [ "${TWILIO,,}" = "y" ] || [ "${TWILIO,,}" = "yes" ]; then
+  ENV_FILE="$ROOT/.env"
+  if [ ! -f "$ENV_FILE" ]; then
+    touch "$ENV_FILE"
   fi
-  return 0
-}
+  {
+    echo ""
+    echo "# Twilio SMS — never commit .env"
+    echo "TWILIO_ACCOUNT_SID="
+    echo "TWILIO_AUTH_TOKEN="
+    echo "TWILIO_FROM="
+    echo "TWILIO_TO="
+  } >> "$ENV_FILE"
+  echo "  Added Twilio placeholders to .env — fill in credentials."
+fi
 
-# Derive Windows username: WIN_HOME (path) -> USERPROFILE (path) -> $USER under /mnt/c/Users
-get_windows_user() {
-  local win_user
-  if [[ -n "${WIN_HOME:-}" ]]; then
-    # WIN_HOME might be /mnt/c/Users/joe
-    if [[ "$WIN_HOME" =~ /mnt/c/Users/([^/]+) ]]; then
-      printf '%s' "${BASH_REMATCH[1]}"
-      return 0
-    fi
-  fi
-  if [[ -n "${USERPROFILE:-}" ]]; then
-    # USERPROFILE might be C:\Users\joe -> extract "joe"
-    win_user="${USERPROFILE//\\/\/}"
-    if [[ "$win_user" =~ [Uu]sers/([^/]+) ]]; then
-      printf '%s' "${BASH_REMATCH[1]}"
-      return 0
-    fi
-  fi
-  if [[ -d /mnt/c/Users/"${USER:-}" ]]; then
-    printf '%s' "$USER"
-    return 0
-  fi
-  return 1
-}
+# Create goals.md if absent
+RESOLVED_GOALS="$ROOT/goals.md"
+if [ "$GOALS_PATH" != "./goals.md" ]; then
+  RESOLVED_GOALS="$ROOT/${GOALS_PATH#./}"
+fi
+if [ ! -f "$RESOLVED_GOALS" ]; then
+  mkdir -p "$(dirname "$RESOLVED_GOALS")"
+  cat > "$RESOLVED_GOALS" << 'GOALS'
+# Goals
 
-run_check_env() {
-  log "=== WSL environment check ==="
-  if ! detect_wsl; then exit 1; fi
-  log "WSL: WSL2 detected."
-  if ! check_mnt_c; then exit 1; fi
-  log "/mnt/c: present and readable."
-  local win_user
-  if win_user=$(get_windows_user); then
-    log "Windows user (candidate): $win_user"
-    log "Windows .cursor path: /mnt/c/Users/$win_user/.cursor"
-  else
-    err "Could not determine Windows user. Set WIN_HOME or USERPROFILE, or ensure /mnt/c/Users/\$USER exists."
-    exit 1
-  fi
-  return 0
-}
+## Pending
+- [ ] My first goal — describe what you want to build
 
-# --- Task 2: Resolve Windows .cursor path and locate GSD rules ---
-resolve_cursor_path() {
-  local win_user
-  win_user=$(get_windows_user) || true
-  if [[ -z "$win_user" ]]; then
-    err "Cannot resolve Windows user. Set WIN_HOME or USERPROFILE, or ensure /mnt/c/Users/\$USER exists."
-    return 1
-  fi
-  CURSOR_DIR="/mnt/c/Users/$win_user/.cursor"
-  RULES_SRC="$CURSOR_DIR/rules"
-  if [[ ! -d "$CURSOR_DIR" ]]; then
-    err "Windows .cursor directory not found: $CURSOR_DIR"
-    err "Install Cursor on Windows and ensure the .cursor folder exists under your Windows user profile."
-    return 1
-  fi
-  if [[ ! -d "$RULES_SRC" ]]; then
-    err "GSD rules directory not found: $RULES_SRC"
-    err "Install the GSD framework rules in Cursor (Windows) so that .cursor/rules exists."
-    return 1
-  fi
-  log "Resolved Windows .cursor/rules: $RULES_SRC"
-  return 0
-}
+## In Progress
 
-run_check_cursor() {
-  if ! detect_wsl || ! check_mnt_c; then exit 1; fi
-  if ! resolve_cursor_path; then exit 1; fi
-  return 0
-}
+## Done
+GOALS
+  echo "  Created goals.md"
+fi
 
-# --- Dry-run: detection + print planned actions, no filesystem changes ---
-run_dry_run() {
-  log "=== Dry run (no changes) ==="
-  if ! detect_wsl; then exit 1; fi
-  log "WSL: WSL2 detected."
-  if ! check_mnt_c; then exit 1; fi
-  log "/mnt/c: present and readable."
-  if ! resolve_cursor_path; then exit 1; fi
-  log "Would sync: $RULES_SRC -> $REPO_ROOT/.cursor/rules"
-  log "No files modified."
-  return 0
-}
+# Build dist
+if [ -f "$ROOT/package.json" ]; then
+  (cd "$ROOT" && npm run build 2>/dev/null) || true
+fi
 
-# --- Post-condition checks (after bootstrap) ---
-run_validation_checks() {
-  local failed=()
-  if ! detect_wsl &>/dev/null; then
-    failed+=("WSL2 detection")
-  fi
-  if ! check_mnt_c &>/dev/null; then
-    failed+=("Windows /mnt/c not available")
-  fi
-  if [[ ! -d "$REPO_ROOT/.cursor/rules" ]]; then
-    failed+=("missing .cursor/rules")
-  fi
-  if [[ ! -f "$REPO_ROOT/package.json" ]]; then
-    failed+=("project root missing package.json")
-  fi
-  if [[ -n "${failed[*]:-}" ]]; then
-    err "Validation failed: ${failed[*]}"
-    return 1
-  fi
-  log "Validation passed: .cursor/rules present, WSL2 OK, project root healthy."
-  return 0
-}
-
-# --- Task 3: Copy or sync GSD rules into the workspace safely ---
-sync_rules() {
-  local dest_dir
-  dest_dir="${1:-.cursor/rules}"
-  if [[ -z "$RULES_SRC" ]] || [[ ! -d "$RULES_SRC" ]]; then
-    err "Source rules path not set or missing. Run path resolution first."
-    return 1
-  fi
-  mkdir -p "$dest_dir"
-  if command -v rsync &>/dev/null; then
-    log "Syncing GSD rules (rsync) from $RULES_SRC to $dest_dir"
-    rsync -a --exclude='.git' "$RULES_SRC/" "$dest_dir/"
-  else
-    log "Copying GSD rules (cp) from $RULES_SRC to $dest_dir"
-    cp -r "$RULES_SRC"/* "$dest_dir/" 2>/dev/null || cp -r "$RULES_SRC"/. "$dest_dir/"
-  fi
-  log "Rules synced successfully. You can re-run this script to refresh (idempotent)."
-  return 0
-}
-
-# --- Smoke test: node/npm, install if needed, minimal test (Task 2) ---
-run_smoke_test() {
-  if ! command -v node &>/dev/null; then
-    err "Smoke test failed: node not found. Install Node.js (>=18)."
-    return 1
-  fi
-  if ! command -v npm &>/dev/null; then
-    err "Smoke test failed: npm not found. Install npm or use pnpm."
-    return 1
-  fi
-  log "Node: $(node --version). npm: $(npm --version)."
-  if [[ ! -d "$REPO_ROOT/node_modules" ]]; then
-    log "Installing dependencies..."
-    (cd "$REPO_ROOT" && npm install) || { err "npm install failed."; return 1; }
-  fi
-  local smoke_cmd=""
-  if [[ -f "$REPO_ROOT/package.json" ]]; then
-    if grep -qE '"\s*smoke\s*"' "$REPO_ROOT/package.json" 2>/dev/null; then
-      smoke_cmd="npm run smoke"
-    elif grep -qE '"\s*test\s*"' "$REPO_ROOT/package.json" 2>/dev/null; then
-      smoke_cmd="npm test"
-    elif grep -qE '"\s*lint\s*"' "$REPO_ROOT/package.json" 2>/dev/null; then
-      smoke_cmd="npm run lint"
-    fi
-  fi
-  if [[ -z "$smoke_cmd" ]]; then
-    log "No smoke/test/lint script in package.json; skipping orchestrator smoke."
-    return 0
-  fi
-  log "Running orchestrator smoke: $smoke_cmd"
-  (cd "$REPO_ROOT" && eval "$smoke_cmd") || { err "Smoke test failed ($smoke_cmd)."; return 1; }
-  log "Smoke test passed."
-  return 0
-}
-
-# --- Validate: full bootstrap + post-condition checks + smoke test ---
-run_validate() {
-  if ! detect_wsl || ! check_mnt_c; then exit 1; fi
-  if ! resolve_cursor_path; then exit 1; fi
-  sync_rules "$REPO_ROOT/.cursor/rules"
-  if ! run_validation_checks; then exit 1; fi
-  log "Bootstrap and validation passed. Running orchestrator smoke test..."
-  if ! run_smoke_test; then
-    err "Bootstrap and validation succeeded, but smoke test failed. Check Node/npm and project tests."
-    return 1
-  fi
-  return 0
-}
-
-# --- Main ---
-case "$MODE" in
-  dry-run)
-    run_dry_run
-    exit 0
-    ;;
-  validate)
-    run_validate
-    exit 0
-    ;;
-  bootstrap)
-    if ! detect_wsl || ! check_mnt_c; then exit 1; fi
-    if ! resolve_cursor_path; then exit 1; fi
-    sync_rules "$REPO_ROOT/.cursor/rules"
-    log "Bootstrap complete. Run 'bash setup.sh --validate' to verify and optionally run smoke tests."
-    exit 0
-    ;;
-  *)
-    err "Unknown mode: $MODE"
-    exit 1
-    ;;
-esac
+echo ""
+echo "  ✓ Initialized! Next steps:"
+echo "    1. Edit goals.md and add your first goal"
+echo "    2. Run ./run to start the daemon"
+echo "    3. Run: tmux attach -t gsd-self  to watch it work"
+echo "    Docs: https://github.com/0jrm/gsd-unsupervised"
+echo ""
