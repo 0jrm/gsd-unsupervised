@@ -19,6 +19,14 @@ export function getCursorBinaryPath(config: AutopilotConfig): string {
   return configured;
 }
 
+export function getCnBinaryPath(config: AutopilotConfig): string {
+  const override = process.env.GSD_CN_BIN;
+  if (override && override.trim() !== '') {
+    return override.trim();
+  }
+  return config.continueCliPath ?? 'cn';
+}
+
 export function getClipExePath(): string | null {
   if (!isWsl()) return null;
 

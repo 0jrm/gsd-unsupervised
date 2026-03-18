@@ -29,6 +29,8 @@ export const AutopilotConfigSchema = z.object({
   /** Agent type: cursor (default), claude-code, gemini-cli, codex. Invalid values fail validation. */
   agent: AgentIdSchema.default('cursor'),
   cursorAgentPath: z.string().default('cursor-agent'),
+  /** Path to cn (Continue CLI) binary. Default 'cn'. Override via GSD_CN_BIN env. */
+  continueCliPath: z.string().default('cn'),
   agentTimeoutMs: z.number().int().min(10000).default(600000),
   sessionLogPath: z.string().default('./session-log.jsonl'),
   stateWatchDebounceMs: z.number().int().min(100).default(500),
