@@ -146,6 +146,7 @@ export async function runDaemon(
   const stateMdPath = path.join(config.workspaceRoot, '.planning', 'STATE.md');
   const heartbeatPath = path.join(config.workspaceRoot, '.planning', 'heartbeat.txt');
   const planningConfigPath = path.join(config.workspaceRoot, '.planning', 'config.json');
+  const pauseFlagPath = path.join(config.workspaceRoot, '.pause-autopilot');
   const heartbeatTimeoutMs = 60_000;
 
   let effectiveParallel = config.parallel;
@@ -190,6 +191,8 @@ export async function runDaemon(
           running: !shuttingDown,
           currentGoal: currentGoal ?? undefined,
           currentAgentId: currentAgentSessionId ?? undefined,
+          paused: existsSync(pauseFlagPath),
+          pauseFlagPath,
         }),
         {
           stateMdPath,
@@ -292,8 +295,6 @@ export async function runDaemon(
       );
     }
   }
-
-  const pauseFlagPath = path.join(config.workspaceRoot, '.pause-autopilot');
 
   const goalsUpdatedPath = path.join(config.workspaceRoot, '.gsd', 'goals-updated');
   const goalsReloadDebounceMs = config.goalsReloadDebounceMs ?? 500;
@@ -446,7 +447,13 @@ export async function runDaemon(
               logger.warn({ err: smsErr }, 'SMS notification failed');
             }
             while (existsSync(pauseFlagPath) && !shuttingDown) {
-              logger.info('Pause flag (.pause-autopilot) detected – sleeping 60s');
+              logger.info(
+                {
+                  pauseFlagPath,
+                  recovery: 'Run `gsd-unsupervised unpause` or remove the file manually.',
+                },
+                'Pause flag detected; daemon is paused and sleeping 60s',
+              );
               await new Promise((r) => setTimeout(r, 60_000));
             }
           }
@@ -462,7 +469,13 @@ export async function runDaemon(
   const runWorker = async (): Promise<void> => {
     while (!shuttingDown) {
       while (existsSync(pauseFlagPath)) {
-        logger.info('Pause flag (.pause-autopilot) detected – sleeping 60s');
+        logger.info(
+          {
+            pauseFlagPath,
+            recovery: 'Run `gsd-unsupervised unpause` or remove the file manually.',
+          },
+          'Pause flag detected; daemon is paused and sleeping 60s',
+        );
         await new Promise((r) => setTimeout(r, 60_000));
       }
       const goal = queue.shift() ?? null;

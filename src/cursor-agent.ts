@@ -20,7 +20,7 @@ import {
 } from './session-log.js';
 import type { CursorStreamEvent, ResultEvent } from './stream-events.js';
 import type { AutopilotConfig } from './config.js';
-import { getCursorBinaryPath, getCnBinaryPath } from './config/paths.js';
+import { getCursorBinaryPath, getCnBinaryPath, getCodexBinaryPath } from './config/paths.js';
 import { parseCnOutput } from './cn-output.js';
 
 export type { SessionLogContext };
@@ -253,6 +253,16 @@ export function validateContinueApiKey(): void {
     throw new Error(
       'CONTINUE_API_KEY environment variable is not set or empty.\n' +
       'Set CONTINUE_API_KEY for CI/headless use. Get from https://continue.dev/settings/api-keys',
+    );
+  }
+}
+
+export function validateCodexApiKey(): void {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key || key.trim() === '') {
+    throw new Error(
+      'OPENAI_API_KEY environment variable is not set or empty.\n' +
+      'Set OPENAI_API_KEY for unattended Codex CLI runs.',
     );
   }
 }
@@ -548,6 +558,288 @@ export async function runContinueCli(options: RunContinueCliOptions): Promise<Ru
   });
 }
 
+export interface RunCodexCliOptions {
+  agentPath: string;
+  workspace: string;
+  prompt: string;
+  timeoutMs?: number;
+  env?: Record<string, string>;
+}
+
+/**
+ * Spawn Codex CLI in non-interactive mode via `codex exec`.
+ * Returns RunAgentResult-compatible shape.
+ */
+export async function runCodexCli(options: RunCodexCliOptions): Promise<RunAgentResult> {
+  const { agentPath, workspace, prompt, timeoutMs, env } = options;
+  const args = [
+    'exec',
+    '--json',
+    '--skip-git-repo-check',
+    '--sandbox',
+    'workspace-write',
+    '--ask-for-approval',
+    'never',
+    '--cd',
+    workspace,
+    prompt,
+  ];
+
+  return new Promise<RunAgentResult>((resolve, reject) => {
+    let child: ChildProcess;
+    try {
+      child = spawn(agentPath, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: workspace,
+        env: { ...process.env, ...env },
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      reject(new Error(`codex binary not found or failed to launch: ${msg}`));
+      return;
+    }
+
+    const stdoutChunks: string[] = [];
+    const stderrChunks: string[] = [];
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    child.on('error', (err) => {
+      if (timer) clearTimeout(timer);
+      reject(new Error(`codex process failed to start: ${err.message}`));
+    });
+
+    if (child.stdout) {
+      child.stdout.on('data', (chunk: Buffer) => {
+        stdoutChunks.push(chunk.toString());
+      });
+    }
+    if (child.stderr) {
+      child.stderr.on('data', (chunk: Buffer) => {
+        stderrChunks.push(chunk.toString());
+      });
+    }
+
+    if (timeoutMs != null && timeoutMs > 0) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        abortAgent(child).catch(() => {});
+      }, timeoutMs);
+    }
+
+    child.on('close', (code) => {
+      if (timer) clearTimeout(timer);
+      const stdout = stdoutChunks.join('');
+      const stderr = stderrChunks.join('');
+
+      let sessionId: string | null = null;
+      for (const line of stdout.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+          const sid = parsed.session_id ?? parsed.sessionId;
+          if (typeof sid === 'string' && sid.trim() !== '') {
+            sessionId = sid.trim();
+          }
+        } catch {
+          // ignore non-json line
+        }
+      }
+
+      const outputText = stdout.trim();
+      const errorText = stderr.trim() || outputText || `Agent failed (exit ${code ?? -1})`;
+      let resultEvent: ResultEvent | null = null;
+
+      if (code === 0) {
+        resultEvent = {
+          type: 'result',
+          subtype: 'done',
+          duration_ms: 0,
+          duration_api_ms: 0,
+          is_error: false,
+          result: outputText || 'ok',
+          session_id: sessionId ?? '',
+        };
+      } else {
+        resultEvent = {
+          type: 'result',
+          subtype: 'error',
+          duration_ms: 0,
+          duration_api_ms: 0,
+          is_error: true,
+          result: errorText,
+          session_id: sessionId ?? '',
+        };
+      }
+
+      if (timedOut) {
+        resolve({
+          sessionId,
+          resultEvent: null,
+          events: [],
+          exitCode: code,
+          timedOut: true,
+          stderr: `${stderr}\nAgent timed out after ${timeoutMs}ms`.trim(),
+        });
+      } else {
+        resolve({
+          sessionId,
+          resultEvent,
+          events: [],
+          exitCode: code,
+          timedOut: false,
+          stderr,
+        });
+      }
+    });
+  });
+}
+
+export interface CodexAgentConfig {
+  agentPath: string;
+  defaultTimeoutMs: number;
+  sessionLogPath: string;
+  workspaceRoot: string;
+  heartbeatPath?: string;
+  heartbeatIntervalMs?: number;
+}
+
+export function createCodexInvoker(
+  agentConfig: CodexAgentConfig,
+  callbacks?: AgentInvokerCallbacks,
+): AgentInvoker {
+  return async (command, workspaceDir, logger, logContext): Promise<AgentResult> => {
+    const cmdString = command.args
+      ? `${command.command} ${command.args}`
+      : command.command;
+
+    const prompt =
+      'Execute in non-interactive/YOLO mode. Auto-approve all confirmations. ' +
+      'Do not ask the user any questions — make reasonable decisions autonomously.\n\n' +
+      cmdString;
+
+    logger.info({ command: cmdString }, `Invoking codex: ${cmdString}`);
+
+    const baseEntry: Omit<SessionLogEntry, 'status' | 'durationMs' | 'error'> = {
+      timestamp: new Date().toISOString(),
+      goalTitle: logContext?.goalTitle ?? '',
+      phase: command.command,
+      phaseNumber: logContext?.phaseNumber,
+      planNumber: logContext?.planNumber,
+      sessionId: null,
+      command: cmdString,
+    };
+
+    await appendSessionLog(agentConfig.sessionLogPath, {
+      ...baseEntry,
+      status: 'running',
+    });
+
+    const startMs = Date.now();
+    const heartbeatPath = agentConfig.heartbeatPath;
+    const heartbeatIntervalMs = agentConfig.heartbeatIntervalMs ?? 15_000;
+    let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+    const stopHeartbeat = async (): Promise<void> => {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+      if (heartbeatPath) {
+        try {
+          await unlink(heartbeatPath);
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    if (heartbeatPath) {
+      const tick = (): void => {
+        writeFile(heartbeatPath!, new Date().toISOString(), 'utf-8').catch(() => {});
+      };
+      tick();
+      heartbeatTimer = setInterval(tick, heartbeatIntervalMs);
+    }
+
+    try {
+      const result = await runCodexCli({
+        agentPath: agentConfig.agentPath,
+        workspace: workspaceDir,
+        prompt,
+        timeoutMs: agentConfig.defaultTimeoutMs,
+        env: process.env.OPENAI_API_KEY
+          ? { OPENAI_API_KEY: process.env.OPENAI_API_KEY }
+          : undefined,
+      });
+
+      const durationMs = Date.now() - startMs;
+      await stopHeartbeat();
+      callbacks?.setAgentSessionId?.(null);
+
+      if (result.timedOut) {
+        const errMsg = `Agent timed out after ${agentConfig.defaultTimeoutMs}ms`;
+        await appendSessionLog(agentConfig.sessionLogPath, {
+          ...baseEntry,
+          sessionId: result.sessionId,
+          status: 'timeout',
+          durationMs,
+          error: errMsg,
+        });
+        return { success: false, error: errMsg };
+      }
+
+      if (result.exitCode === 0 && result.resultEvent) {
+        await appendSessionLog(agentConfig.sessionLogPath, {
+          ...baseEntry,
+          sessionId: result.sessionId,
+          status: 'done',
+          durationMs,
+        });
+        return { success: true, output: result.resultEvent.result };
+      }
+
+      const stderrSnippet = result.stderr.slice(0, 500);
+      const errorMsg = result.resultEvent?.is_error
+        ? `Agent error: ${result.resultEvent.result}`
+        : `Agent failed (exit ${result.exitCode ?? -1})${stderrSnippet ? `: ${stderrSnippet}` : ''}`;
+      await appendSessionLog(agentConfig.sessionLogPath, {
+        ...baseEntry,
+        sessionId: result.sessionId,
+        status: 'crashed',
+        durationMs,
+        error: errorMsg,
+      });
+      callbacks?.onCrashedAfterRetries?.({
+        goalTitle: logContext?.goalTitle ?? '',
+        phaseNumber: logContext?.phaseNumber,
+        planNumber: logContext?.planNumber,
+      });
+      return { success: false, error: errorMsg };
+    } catch (err) {
+      await stopHeartbeat();
+      callbacks?.setAgentSessionId?.(null);
+      const durationMs = Date.now() - startMs;
+      const message = err instanceof Error ? err.message : String(err);
+      void Promise.resolve(
+        appendSessionLog(agentConfig.sessionLogPath, {
+          ...baseEntry,
+          status: 'crashed',
+          durationMs,
+          error: message,
+        }),
+      ).catch(() => {});
+      callbacks?.onCrashedAfterRetries?.({
+        goalTitle: logContext?.goalTitle ?? '',
+        phaseNumber: logContext?.phaseNumber,
+        planNumber: logContext?.planNumber,
+      });
+      return { success: false, error: `Agent invocation failed: ${message}` };
+    }
+  };
+}
+
 /** Agent-agnostic factory: returns the appropriate invoker for the given agent ID. */
 export function createAgentInvoker(
   agentId: AgentId,
@@ -579,9 +871,20 @@ export function createAgentInvoker(
         },
         callbacks,
       );
+    case 'codex':
+      return createCodexInvoker(
+        {
+          agentPath: getCodexBinaryPath(config),
+          defaultTimeoutMs: config.agentTimeoutMs,
+          sessionLogPath: config.sessionLogPath,
+          workspaceRoot: config.workspaceRoot,
+          heartbeatPath: path.join(config.workspaceRoot, '.planning', 'heartbeat.txt'),
+          heartbeatIntervalMs: 15_000,
+        },
+        callbacks,
+      );
     case 'claude-code':
-    case 'gemini-cli':
-    case 'codex': {
+    case 'gemini-cli': {
       // TODO: Implement real adapters when those agents support GSD NDJSON/heartbeat contract.
       const stub: AgentInvoker = async (command, workspaceDir, logger, _logContext) => {
         logger.info(

@@ -1,6 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { existsSync, readdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
+import type { SessionLogEntry } from './session-log.js';
 
 export interface PhaseInfo {
   number: number;
@@ -15,8 +16,17 @@ export interface PlanInfo {
   planNumber: number;
   planPath: string;
   summaryPath: string;
+  executionStatus: PlanExecutionStatus;
   executed: boolean;
 }
+
+export type PlanExecutionStatus =
+  | 'pending'
+  | 'done'
+  | 'skipped'
+  | 'verify-failed'
+  | 'crashed'
+  | 'timeout';
 
 const PHASE_RE = /^- \[([ xX])\] \*\*Phase (\d+(?:\.\d+)?): (.+?)\*\* — (.+)$/;
 const PLAN_FILE_RE = /^(\d+(?:\.\d+)?)-(\d+)-PLAN\.md$/;
@@ -90,7 +100,10 @@ export function findPhaseDir(phasesRoot: string, phaseNumber: number): string | 
   return matches.length === 1 ? join(phasesRoot, matches[0]) : null;
 }
 
-export async function discoverPlans(phaseDir: string): Promise<PlanInfo[]> {
+export async function discoverPlans(
+  phaseDir: string,
+  executionStatuses?: Map<number, PlanExecutionStatus>,
+): Promise<PlanInfo[]> {
   let entries: string[];
   try {
     entries = await readdir(phaseDir);
@@ -112,9 +125,10 @@ export async function discoverPlans(phaseDir: string): Promise<PlanInfo[]> {
     const planPath = join(phaseDir, entry);
     const summaryFile = entry.replace('-PLAN.md', '-SUMMARY.md');
     const summaryPath = join(phaseDir, summaryFile);
-    const executed = existsSync(summaryPath);
+    const executionStatus = executionStatuses?.get(planNumber) ?? 'pending';
+    const executed = executionStatus !== 'pending';
 
-    plans.push({ phaseNumber, planNumber, planPath, summaryPath, executed });
+    plans.push({ phaseNumber, planNumber, planPath, summaryPath, executionStatus, executed });
   }
 
   plans.sort((a, b) => a.planNumber - b.planNumber);
@@ -130,8 +144,38 @@ export function isPhaseComplete(plans: PlanInfo[]): boolean {
 }
 
 /**
- * Returns true iff the plan's SUMMARY file exists (auditable plan completion).
- * Same heuristic as discoverPlans: plan XX-N-PLAN.md → XX-N-SUMMARY.md (N may be zero-padded).
+ * Derive per-plan terminal execution status from session log entries.
+ * Only terminal execute-plan outcomes are considered authoritative.
+ */
+export function derivePlanExecutionStatuses(
+  entries: SessionLogEntry[],
+  phaseNumber: number,
+  goalTitle?: string,
+): Map<number, PlanExecutionStatus> {
+  const result = new Map<number, PlanExecutionStatus>();
+  for (const entry of entries) {
+    if (entry.phase !== '/gsd/execute-plan') continue;
+    if (entry.phaseNumber !== phaseNumber) continue;
+    if (goalTitle && entry.goalTitle !== goalTitle) continue;
+    if (typeof entry.planNumber !== 'number' || entry.planNumber < 1) continue;
+    switch (entry.status) {
+      case 'done':
+      case 'skipped':
+      case 'verify-failed':
+      case 'crashed':
+      case 'timeout':
+        result.set(entry.planNumber, entry.status);
+        break;
+      default:
+        break;
+    }
+  }
+  return result;
+}
+
+/**
+ * Legacy helper for compatibility with older tests/tools.
+ * SUMMARY file existence is informational only and not used for orchestration truth.
  */
 export function isPlanCompleted(phaseDir: string, planNumber: number): boolean {
   const plans = readdirSync(phaseDir);

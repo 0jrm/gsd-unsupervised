@@ -6,8 +6,8 @@ The goal is to help you:
 
 - Confirm whether you are running under WSL.
 - See how your workspace path maps from WSL to Windows.
-- Understand how the CLI resolves the Cursor agent binary and `clip.exe`.
-- Configure `GSD_CURSOR_BIN` and `GSD_CLIP_EXE` explicitly when needed.
+- Understand how the CLI resolves agent binaries and `clip.exe`.
+- Configure `GSD_CURSOR_BIN`, `GSD_CN_BIN`, `GSD_CODEX_BIN`, and `GSD_CLIP_EXE` explicitly when needed.
 
 ## How WSL is detected
 
@@ -22,19 +22,26 @@ These helpers are intentionally conservative: if a path cannot be safely convert
 
 ## Path resolution under WSL
 
-Centralized path resolution for the Cursor agent, clipboard integration, and workspace display paths lives in `src/config/paths.ts`:
+Centralized path resolution for agent binaries, clipboard integration, and workspace display paths lives in `src/config/paths.ts`:
 
 - `getCursorBinaryPath(config)`:
   - Prefers the `GSD_CURSOR_BIN` environment variable when set.
   - Falls back to `config.cursorAgentPath` from the autopilot config.
   - Finally falls back to `cursor-agent` if neither is provided.
   - When running under WSL and `cursorAgentPath` is a `/mnt/*` path, it attempts to map that to a Windows-style path using `toWindowsPath`.
+- `getCnBinaryPath(config)`:
+  - Prefers `GSD_CN_BIN` when set.
+  - Falls back to `config.continueCliPath`.
+  - Finally falls back to `cn`.
+- `getCodexBinaryPath(config)`:
+  - Prefers `GSD_CODEX_BIN` when set.
+  - Falls back to `config.codexCliPath`.
+  - Finally falls back to `codex`.
 - `getClipExePath()`:
   - When *not* running under WSL: returns `null` (clipboard integration is disabled by default).
   - Under WSL:
     - Prefers `GSD_CLIP_EXE` if set.
-    - Otherwise, if `/mnt/c/Windows/System32/clip.exe` exists, returns `C:\Windows\System32\clip.exe` as a safe default.
-    - If neither check succeeds, returns `null`.
+    - Otherwise, returns `C:\Windows\System32\clip.exe` as the default path.
 - `getWorkspaceDisplayPath(workspaceRoot)`:
   - Always returns the WSL path.
   - When under WSL, also returns a best-effort Windows mapping using `toWindowsPath`, or `null` if no mapping can be inferred.
@@ -136,4 +143,3 @@ Add these exports to your WSL shell profile (e.g. `~/.bashrc` or `~/.zshrc`) and
 2. Start the daemon as usual; `src/cli.ts` will log the resolved environment including the Cursor binary and clipboard path.
 
 With this in place, WSL-specific behavior should be predictable, and the autonomous daemon can use the correct paths without additional manual configuration.
-

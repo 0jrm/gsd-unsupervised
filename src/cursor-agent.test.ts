@@ -14,6 +14,7 @@ const baseConfig: AutopilotConfig = {
   agent: 'cursor',
   cursorAgentPath: '/usr/bin/cursor-agent',
   continueCliPath: 'cn',
+  codexCliPath: 'codex',
   agentTimeoutMs: 60_000,
   sessionLogPath: '/tmp/session-log.jsonl',
   stateWatchDebounceMs: 500,
@@ -70,19 +71,10 @@ describe('createAgentInvoker', () => {
     );
   });
 
-  it('returns non-throwing stub for codex', async () => {
+  it('returns codex adapter for agent codex', () => {
     const invoker = createAgentInvoker('codex', baseConfig);
-    const infoSpy = vi.spyOn(logger, 'info');
-    const result = await invoker(
-      { command: '/gsd/new-project', description: 'test' },
-      '/workspace',
-      logger,
-    );
-    expect(result.success).toBe(true);
-    expect(result.output).toBe('stub');
-    expect(infoSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Stub (codex)'),
-    );
+    expect(invoker).toBeTypeOf('function');
+    expect(invoker.length).toBe(4);
   });
 
   it('stub adapters have same call signature as cursor', async () => {

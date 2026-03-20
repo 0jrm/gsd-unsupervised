@@ -44,6 +44,8 @@ export interface StatusPayload {
   phaseNumber?: number;
   planNumber?: number;
   heartbeat?: string;
+  paused?: boolean;
+  pauseFlagPath?: string;
   /** Live agent session ID while an agent is running (from daemon). */
   currentAgentId?: string | null;
 }
@@ -56,6 +58,8 @@ export interface DashboardStatusPayload {
   phaseNumber?: number;
   planNumber?: number;
   heartbeat?: string;
+  paused?: boolean;
+  pauseFlagPath?: string;
   /** Current agent session ID (from last session log entry). */
   currentAgentId?: string | null;
   /** Current phase/plan from STATE.md. */

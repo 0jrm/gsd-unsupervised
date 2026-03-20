@@ -4,6 +4,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
+  appendFileSync,
   mkdtempSync,
   writeFileSync,
   mkdirSync,
@@ -46,6 +47,7 @@ function makeBaseConfig(workspaceRoot: string): AutopilotConfig {
     workspaceRoot,
     agent: 'cursor',
     cursorAgentPath: 'cursor-agent',
+    codexCliPath: 'codex',
     agentTimeoutMs: 60_000,
     sessionLogPath: join(workspaceRoot, 'session-log.jsonl'),
     stateWatchDebounceMs: 500,
@@ -93,12 +95,43 @@ async function runWithVerifySetup(options: {
   writeFileSync(join(phase1Dir, '01-01-PLAN.md'), validPlanContent, 'utf-8');
   writeFileSync(join(phase1Dir, '01-01-SUMMARY.md'), '# S1\n', 'utf-8');
   writeFileSync(join(phase1Dir, '01-02-PLAN.md'), validPlanContent, 'utf-8');
+  const sessionLogPath = join(workspace, 'session-log.jsonl');
+  appendFileSync(
+    sessionLogPath,
+    `${JSON.stringify({
+      timestamp: new Date().toISOString(),
+      goalTitle: 'Verify test',
+      phase: '/gsd/execute-plan',
+      phaseNumber: 1,
+      planNumber: 1,
+      sessionId: 'seed',
+      command: `/gsd/execute-plan ${join(phase1Dir, '01-01-PLAN.md')}`,
+      status: 'done',
+    })}\n`,
+    'utf-8',
+  );
 
   const onQueueFixGoal = vi.fn();
   const agent: AgentInvoker = async (cmd) => {
     if (cmd.command === '/gsd/execute-plan' && cmd.args) {
+      const planMatch = cmd.args.match(/(\d+)-(\d+)-PLAN\.md$/);
+      const parsedPlanNumber = planMatch ? Number(planMatch[2]) : 0;
       const summaryPath = cmd.args.replace('-PLAN.md', '-SUMMARY.md');
       writeFileSync(summaryPath, '# Summary\n', 'utf-8');
+      appendFileSync(
+        sessionLogPath,
+        `${JSON.stringify({
+          timestamp: new Date().toISOString(),
+          goalTitle: 'Verify test',
+          phase: '/gsd/execute-plan',
+          phaseNumber: 1,
+          planNumber: parsedPlanNumber,
+          sessionId: 'agent',
+          command: `/gsd/execute-plan ${cmd.args}`,
+          status: 'done',
+        })}\n`,
+        'utf-8',
+      );
     }
     return { success: true, output: 'ok' };
   };

@@ -95,7 +95,14 @@ describe('status-server', () => {
   });
 
   it('serves GET /api/status with rich dashboard JSON when options provided', async () => {
-    const payload = { running: true, currentGoal: 'Goal', phaseNumber: 6, planNumber: 2 };
+    const payload = {
+      running: true,
+      currentGoal: 'Goal',
+      phaseNumber: 6,
+      planNumber: 2,
+      paused: true,
+      pauseFlagPath: '/tmp/.pause-autopilot',
+    };
     const result = await createStatusServer(port, () => payload, {
       stateMdPath: '/nonexistent/STATE.md',
       sessionLogPath: '/nonexistent/session-log.jsonl',
@@ -113,6 +120,8 @@ describe('status-server', () => {
     expect(body.currentGoal).toBe('Goal');
     expect(body.phaseNumber).toBe(6);
     expect(body.planNumber).toBe(2);
+    expect(body.paused).toBe(true);
+    expect(body.pauseFlagPath).toBe('/tmp/.pause-autopilot');
     expect(body).toHaveProperty('tokens');
     expect(body).toHaveProperty('cost');
     expect(Array.isArray(body.sessionLogEntries)).toBe(true);

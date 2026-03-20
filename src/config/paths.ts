@@ -27,6 +27,14 @@ export function getCnBinaryPath(config: AutopilotConfig): string {
   return config.continueCliPath ?? 'cn';
 }
 
+export function getCodexBinaryPath(config: AutopilotConfig): string {
+  const override = process.env.GSD_CODEX_BIN;
+  if (override && override.trim() !== '') {
+    return override.trim();
+  }
+  return config.codexCliPath ?? 'codex';
+}
+
 export function getClipExePath(): string | null {
   if (!isWsl()) return null;
 
@@ -58,4 +66,3 @@ export function getWorkspaceDisplayPath(workspaceRoot: string): WorkspaceDisplay
   const windowsPath = toWindowsPath(workspaceRoot) ?? null;
   return { wslPath, windowsPath };
 }
-

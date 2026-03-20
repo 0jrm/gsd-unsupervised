@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   mkdtempSync,
   writeFileSync,
+  appendFileSync,
   mkdirSync,
   rmSync,
 } from 'node:fs';
@@ -31,6 +32,7 @@ function makeBaseConfig(workspaceRoot: string): AutopilotConfig {
     workspaceRoot,
     agent: 'cursor',
     cursorAgentPath: 'cursor-agent',
+    codexCliPath: 'codex',
     agentTimeoutMs: 60_000,
     sessionLogPath: join(workspaceRoot, 'session-log.jsonl'),
     stateWatchDebounceMs: 500,
@@ -54,6 +56,7 @@ async function runWithRecording(options: {
 }) {
   const { workspace, precreateProject, precreateRoadmap } = options;
   const planningDir = join(workspace, '.planning');
+  const sessionLogPath = join(workspace, 'session-log.jsonl');
   mkdirSync(planningDir, { recursive: true });
 
   if (precreateProject) {
@@ -84,6 +87,20 @@ async function runWithRecording(options: {
   ].join('\n\n');
   writeFileSync(join(phase1Dir, '01-01-PLAN.md'), validPlanContent, 'utf-8');
   writeFileSync(join(phase1Dir, '01-01-SUMMARY.md'), '# S1\n', 'utf-8');
+  appendFileSync(
+    sessionLogPath,
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      goalTitle: 'Lifecycle orchestration test',
+      phase: '/gsd/execute-plan',
+      phaseNumber: 1,
+      planNumber: 1,
+      sessionId: null,
+      command: '/gsd/execute-plan .planning/phases/01-alpha/01-01-PLAN.md',
+      status: 'done',
+    }) + '\n',
+    'utf-8',
+  );
   writeFileSync(join(phase1Dir, '01-02-PLAN.md'), validPlanContent, 'utf-8');
 
   // Intentionally do NOT create a directory for Phase 2 ("02-beta") to ensure
@@ -103,6 +120,22 @@ async function runWithRecording(options: {
     if (cmd.command === '/gsd/execute-plan' && cmd.args) {
       const summaryPath = cmd.args.replace('-PLAN.md', '-SUMMARY.md');
       writeFileSync(summaryPath, '# Summary\n', 'utf-8');
+      const m = cmd.args.match(/-(\d+)-PLAN\.md$/);
+      const planNumber = m ? parseInt(m[1]!, 10) : 0;
+      appendFileSync(
+        sessionLogPath,
+        JSON.stringify({
+          timestamp: new Date().toISOString(),
+          goalTitle: 'Lifecycle orchestration test',
+          phase: '/gsd/execute-plan',
+          phaseNumber: 1,
+          planNumber,
+          sessionId: null,
+          command: `/gsd/execute-plan ${cmd.args}`,
+          status: 'done',
+        }) + '\n',
+        'utf-8',
+      );
     }
 
     return { success: true, output: 'ok' };
@@ -222,4 +255,3 @@ describe('orchestrator lifecycle', () => {
     60000,
   );
 });
-

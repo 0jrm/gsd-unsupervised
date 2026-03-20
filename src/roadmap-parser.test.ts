@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { findPhaseDir, discoverPlans, isPlanCompleted } from './roadmap-parser.js';
+import {
+  findPhaseDir,
+  discoverPlans,
+  isPlanCompleted,
+  derivePlanExecutionStatuses,
+} from './roadmap-parser.js';
 
 describe('roadmap-parser', () => {
   let phasesRoot: string;
@@ -69,14 +74,40 @@ describe('roadmap-parser', () => {
       expect(err!.message).toMatch(/Remove the duplicate from .planning\/phases/);
     });
 
-    it('discoverPlans marks executed when SUMMARY exists', async () => {
+    it('discoverPlans marks executed from session-log-derived statuses', async () => {
       writeFileSync(join(phaseDir, '05-01-PLAN.md'), '', 'utf-8');
-      writeFileSync(join(phaseDir, '05-01-SUMMARY.md'), '', 'utf-8');
       writeFileSync(join(phaseDir, '05-02-PLAN.md'), '', 'utf-8');
-      const plans = await discoverPlans(phaseDir);
+      const statuses = derivePlanExecutionStatuses(
+        [
+          {
+            timestamp: new Date().toISOString(),
+            goalTitle: 'Goal',
+            phase: '/gsd/execute-plan',
+            phaseNumber: 5,
+            planNumber: 1,
+            sessionId: null,
+            command: '/gsd/execute-plan p1',
+            status: 'done',
+          },
+        ],
+        5,
+        'Goal',
+      );
+      const plans = await discoverPlans(phaseDir, statuses);
       expect(plans).toHaveLength(2);
       expect(plans[0].executed).toBe(true);
+      expect(plans[0].executionStatus).toBe('done');
       expect(plans[1].executed).toBe(false);
+      expect(plans[1].executionStatus).toBe('pending');
+    });
+
+    it('summary-only plan remains unexecuted without terminal session-log status', async () => {
+      writeFileSync(join(phaseDir, '05-01-PLAN.md'), '', 'utf-8');
+      writeFileSync(join(phaseDir, '05-01-SUMMARY.md'), '', 'utf-8');
+      const plans = await discoverPlans(phaseDir, new Map());
+      expect(plans).toHaveLength(1);
+      expect(plans[0].executed).toBe(false);
+      expect(plans[0].executionStatus).toBe('pending');
     });
   });
 });

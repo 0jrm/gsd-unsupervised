@@ -31,6 +31,8 @@ export const AutopilotConfigSchema = z.object({
   cursorAgentPath: z.string().default('cursor-agent'),
   /** Path to cn (Continue CLI) binary. Default 'cn'. Override via GSD_CN_BIN env. */
   continueCliPath: z.string().default('cn'),
+  /** Path to codex CLI binary. Default 'codex'. Override via GSD_CODEX_BIN env. */
+  codexCliPath: z.string().default('codex'),
   agentTimeoutMs: z.number().int().min(10000).default(600000),
   sessionLogPath: z.string().default('./session-log.jsonl'),
   stateWatchDebounceMs: z.number().int().min(100).default(500),
@@ -168,6 +170,13 @@ function readPlanningOverrides(
       overrides.agent = parsed.agent;
       logger?.debug(
         { from: '.planning/config.json', agent: parsed.agent },
+        'Planning config override applied',
+      );
+    }
+    if (typeof parsed.codexCliPath === 'string') {
+      overrides.codexCliPath = parsed.codexCliPath;
+      logger?.debug(
+        { from: '.planning/config.json', codexCliPath: parsed.codexCliPath },
         'Planning config override applied',
       );
     }

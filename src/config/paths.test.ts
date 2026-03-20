@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { AutopilotConfig } from '../config.js';
 import * as wslHelpers from './wsl.js';
-import { getClipExePath, getCursorBinaryPath, getWorkspaceDisplayPath } from './paths.js';
+import {
+  getClipExePath,
+  getCursorBinaryPath,
+  getWorkspaceDisplayPath,
+  getCodexBinaryPath,
+} from './paths.js';
 
 const baseConfig: AutopilotConfig = {
   goalsPath: './goals.md',
@@ -14,6 +19,7 @@ const baseConfig: AutopilotConfig = {
   workspaceRoot: '/mnt/c/Users/test/proj',
   agent: 'cursor',
   cursorAgentPath: 'cursor-agent',
+  codexCliPath: 'codex',
   agentTimeoutMs: 600_000,
   sessionLogPath: './session-log.jsonl',
   stateWatchDebounceMs: 500,
@@ -51,6 +57,20 @@ describe('paths helpers', () => {
     expect(result).toBe('/usr/local/bin/cursor-agent');
   });
 
+  it('getCodexBinaryPath prefers GSD_CODEX_BIN env', () => {
+    process.env.GSD_CODEX_BIN = '/custom/codex';
+    const result = getCodexBinaryPath(baseConfig);
+    expect(result).toBe('/custom/codex');
+  });
+
+  it('getCodexBinaryPath uses config path when no env override', () => {
+    const result = getCodexBinaryPath({
+      ...baseConfig,
+      codexCliPath: '/usr/local/bin/codex',
+    });
+    expect(result).toBe('/usr/local/bin/codex');
+  });
+
   it('getClipExePath returns null when not in WSL', () => {
     vi.spyOn(wslHelpers, 'isWsl').mockReturnValue(false);
     expect(getClipExePath()).toBeNull();
@@ -76,4 +96,3 @@ describe('paths helpers', () => {
     expect(result.windowsPath).toBe('C:\\Users\\test\\proj');
   });
 });
-

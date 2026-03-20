@@ -1,17 +1,26 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 import { Command } from 'commander';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, unlinkSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { initLogger, createChildLogger } from './logger.js';
 import { loadConfig } from './config.js';
 import { loadGoals, getPendingGoals } from './goals.js';
 import { runDaemon, registerShutdownHandlers } from './daemon.js';
-import { validateCursorApiKey, validateContinueApiKey } from './cursor-agent.js';
+import {
+  validateCursorApiKey,
+  validateContinueApiKey,
+  validateCodexApiKey,
+  runContinueCli,
+  runCodexCli,
+} from './cursor-agent.js';
 import { sendSms, isSmsConfigured } from './notifier.js';
 import { applyWslBootstrap } from './bootstrap/wsl-bootstrap.js';
 import { readGsdStateFromPath } from './gsd-state.js';
+import { runAgentWithRetry, DEFAULT_RETRY_POLICY } from './agent-runner.js';
+import { getCursorBinaryPath, getCnBinaryPath, getCodexBinaryPath } from './config/paths.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -20,6 +29,113 @@ function getVersion(): string {
   const pkgPath = resolve(__dirname, '..', 'package.json');
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
   return pkg.version;
+}
+
+function validateLocalAgentCredentials(agent: string): void {
+  if (agent === 'cursor') {
+    validateCursorApiKey();
+    return;
+  }
+  if (agent === 'cn') {
+    validateContinueApiKey();
+    return;
+  }
+  if (agent === 'codex') {
+    validateCodexApiKey();
+  }
+}
+
+function ensureAgentBinaryAvailable(agent: string, paths: {
+  cursorBin: string;
+  cnBin: string;
+  codexBin: string;
+}): void {
+  const binary = agent === 'cursor'
+    ? paths.cursorBin
+    : agent === 'cn'
+      ? paths.cnBin
+      : agent === 'codex'
+        ? paths.codexBin
+        : null;
+  if (!binary) return;
+
+  const probe = spawnSync(binary, ['--version'], { stdio: 'ignore', shell: false });
+  if (probe.error) {
+    throw new Error(`Agent binary not available (${binary}): ${probe.error.message}`);
+  }
+}
+
+async function runNetworkAgentValidation(options: {
+  agent: string;
+  workspaceRoot: string;
+  timeoutMs: number;
+  cursorBin: string;
+  cnBin: string;
+  codexBin: string;
+}): Promise<void> {
+  const {
+    agent,
+    workspaceRoot,
+    timeoutMs,
+    cursorBin,
+    cnBin,
+    codexBin,
+  } = options;
+  const prompt = 'Reply with exactly: OK';
+
+  if (agent === 'cursor') {
+    const result = await runAgentWithRetry(
+      {
+        agentPath: cursorBin,
+        workspace: workspaceRoot,
+        prompt,
+        timeoutMs,
+        env: process.env.CURSOR_API_KEY
+          ? { CURSOR_API_KEY: process.env.CURSOR_API_KEY }
+          : undefined,
+      },
+      { ...DEFAULT_RETRY_POLICY, maxAttempts: 1 },
+      initLogger({ level: 'silent', pretty: false }),
+    );
+    if (result.timedOut || result.exitCode !== 0 || !result.resultEvent || result.resultEvent.is_error) {
+      throw new Error(result.stderr || `Cursor preflight failed (exit ${result.exitCode ?? -1})`);
+    }
+    return;
+  }
+
+  if (agent === 'cn') {
+    const result = await runContinueCli({
+      agentPath: cnBin,
+      workspace: workspaceRoot,
+      prompt,
+      timeoutMs,
+      env: process.env.CONTINUE_API_KEY
+        ? { CONTINUE_API_KEY: process.env.CONTINUE_API_KEY }
+        : undefined,
+    });
+    if (result.timedOut || result.exitCode !== 0 || !result.resultEvent || result.resultEvent.is_error) {
+      throw new Error(result.stderr || `Continue preflight failed (exit ${result.exitCode ?? -1})`);
+    }
+    return;
+  }
+
+  if (agent === 'codex') {
+    const result = await runCodexCli({
+      agentPath: codexBin,
+      workspace: workspaceRoot,
+      prompt,
+      timeoutMs,
+      env: process.env.OPENAI_API_KEY
+        ? { OPENAI_API_KEY: process.env.OPENAI_API_KEY }
+        : undefined,
+    });
+    if (result.timedOut || result.exitCode !== 0 || !result.resultEvent || result.resultEvent.is_error) {
+      throw new Error(result.stderr || `Codex preflight failed (exit ${result.exitCode ?? -1})`);
+    }
+    return;
+  }
+
+  throw new Error(`Network preflight is not implemented for agent: ${agent}`);
 }
 
 const program = new Command();
@@ -80,18 +196,16 @@ program
         'Resolved environment for current platform',
       );
 
-      if (!(opts.dryRun as boolean) && config.agent === 'cursor') {
+      const agentPaths = {
+        cursorBin: getCursorBinaryPath(config),
+        cnBin: getCnBinaryPath(config),
+        codexBin: getCodexBinaryPath(config),
+      };
+
+      if (!(opts.dryRun as boolean) && (config.agent === 'cursor' || config.agent === 'cn' || config.agent === 'codex')) {
         try {
-          validateCursorApiKey();
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          process.stderr.write(`Error: ${message}\n`);
-          process.exit(1);
-        }
-      }
-      if (!(opts.dryRun as boolean) && config.agent === 'cn') {
-        try {
-          validateContinueApiKey();
+          validateLocalAgentCredentials(config.agent);
+          ensureAgentBinaryAvailable(config.agent, agentPaths);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           process.stderr.write(`Error: ${message}\n`);
@@ -181,9 +295,14 @@ program
         { mode: state.mode, project: state.project, goalsPath: config.goalsPath },
         'Resuming from state',
       );
-      if (config.agent === 'cursor') {
+      if (config.agent === 'cursor' || config.agent === 'cn' || config.agent === 'codex') {
         try {
-          validateCursorApiKey();
+          validateLocalAgentCredentials(config.agent);
+          ensureAgentBinaryAvailable(config.agent, {
+            cursorBin: getCursorBinaryPath(config),
+            cnBin: getCnBinaryPath(config),
+            codexBin: getCodexBinaryPath(config),
+          });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           process.stderr.write(`Error: ${message}\n`);
@@ -244,6 +363,94 @@ program
   .action(async () => {
     const { newProjectCommand } = await import('./intake/cli-commands.js');
     await newProjectCommand();
+  });
+
+/** Remove pause flag created after repeated daemon failures. */
+program
+  .command('unpause')
+  .description('Clear .pause-autopilot so daemon workers can resume')
+  .option('--state <path>', 'Path to .gsd/state.json', undefined)
+  .option('--workspace <path>', 'Workspace root (used when --state not provided)', process.cwd())
+  .action(async (opts) => {
+    const cwd = process.cwd();
+    let workspaceRoot = resolve(cwd, opts.workspace as string);
+    if (opts.state) {
+      const statePath = resolve(cwd, opts.state as string);
+      const projectRoot = dirname(dirname(statePath));
+      const state = await readGsdStateFromPath(statePath, projectRoot);
+      if (!state) {
+        console.error('Invalid or empty state at', statePath);
+        process.exit(1);
+      }
+      workspaceRoot = resolve(projectRoot, state.workspaceRoot);
+    }
+
+    const pauseFlagPath = join(workspaceRoot, '.pause-autopilot');
+    if (!existsSync(pauseFlagPath)) {
+      console.log(`No pause flag found at ${pauseFlagPath}`);
+      return;
+    }
+
+    unlinkSync(pauseFlagPath);
+    console.log(`Unpaused: removed ${pauseFlagPath}`);
+  });
+
+/** Validate local agent configuration; optional network smoke test. */
+program
+  .command('validate-agent')
+  .description('Validate agent credentials and binary availability (optional network smoke test)')
+  .option('--agent <name>', 'Agent type: cursor, cn, codex, claude-code, gemini-cli', 'cursor')
+  .option('--network', 'Run a live network smoke test', false)
+  .option('--config <path>', 'Path to config JSON file', './.autopilot/config.json')
+  .option('--workspace <path>', 'Workspace root', process.cwd())
+  .option('--timeout <ms>', 'Network smoke-test timeout in milliseconds', '30000')
+  .action(async (opts) => {
+    const logger = initLogger({ level: 'silent', pretty: false });
+    const workspaceRoot = resolve(process.cwd(), opts.workspace as string);
+    const timeoutMs = parseInt(opts.timeout as string, 10);
+    const config = loadConfig({
+      configPath: opts.config as string,
+      cliOverrides: {
+        workspaceRoot,
+        agent: opts.agent as import('./config.js').AutopilotConfig['agent'],
+      },
+      logger,
+    });
+
+    const cursorBin = getCursorBinaryPath(config);
+    const cnBin = getCnBinaryPath(config);
+    const codexBin = getCodexBinaryPath(config);
+    try {
+      if (config.agent === 'cursor' || config.agent === 'cn' || config.agent === 'codex') {
+        validateLocalAgentCredentials(config.agent);
+        ensureAgentBinaryAvailable(config.agent, { cursorBin, cnBin, codexBin });
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`Local validation failed: ${message}`);
+      process.exit(1);
+    }
+
+    if (!(opts.network as boolean)) {
+      console.log(`Local validation passed for agent '${config.agent}'.`);
+      return;
+    }
+
+    try {
+      await runNetworkAgentValidation({
+        agent: config.agent,
+        workspaceRoot: config.workspaceRoot,
+        timeoutMs,
+        cursorBin,
+        cnBin,
+        codexBin,
+      });
+      console.log(`Network preflight passed for agent '${config.agent}'.`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`Network preflight failed: ${message}`);
+      process.exit(1);
+    }
   });
 
 /** Send a test SMS to verify Twilio config (TWILIO_* in .env or env). */
