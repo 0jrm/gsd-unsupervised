@@ -26,7 +26,7 @@ export const AutopilotConfigSchema = z.object({
   verbose: z.boolean().default(false),
   logLevel: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   workspaceRoot: z.string().default(process.cwd()),
-  /** Agent type: cursor (default), claude-code, gemini-cli, codex. Invalid values fail validation. */
+  /** Agent type: cursor (default), cn, codex. Invalid values fail validation. */
   agent: AgentIdSchema.default('cursor'),
   cursorAgentPath: z.string().default('cursor-agent'),
   /** Path to cn (Continue CLI) binary. Default 'cn'. Override via GSD_CN_BIN env. */

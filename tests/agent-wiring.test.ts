@@ -57,7 +57,7 @@ describe('agent wiring', () => {
         verbose: false,
         logLevel: 'info',
         workspaceRoot: workspace,
-        agent: 'claude-code',
+        agent: 'codex',
         cursorAgentPath: 'cursor-agent',
         agentTimeoutMs: 60_000,
         sessionLogPath: join(workspace, 'session-log.jsonl'),
@@ -69,7 +69,7 @@ describe('agent wiring', () => {
     );
 
     expect(createAgentInvokerSpy).toHaveBeenCalledWith(
-      'claude-code',
+      'codex',
       expect.objectContaining({ workspaceRoot: workspace }),
       expect.any(Object),
     );
@@ -107,7 +107,7 @@ describe('agent wiring', () => {
     );
   });
 
-  it('createAgentInvoker is called with claude-code when config.agent is claude-code', async () => {
+  it('createAgentInvoker is called with cn when config.agent is cn', async () => {
     const createAgentInvokerSpy = vi.spyOn(cursorAgent, 'createAgentInvoker');
     const logger = initLogger({ level: 'silent', pretty: false });
 
@@ -119,7 +119,7 @@ describe('agent wiring', () => {
         verbose: false,
         logLevel: 'info',
         workspaceRoot: workspace,
-        agent: 'claude-code',
+        agent: 'cn',
         cursorAgentPath: 'cursor-agent',
         agentTimeoutMs: 60_000,
         sessionLogPath: join(workspace, 'session-log.jsonl'),
@@ -131,7 +131,7 @@ describe('agent wiring', () => {
     );
 
     expect(createAgentInvokerSpy).toHaveBeenCalledWith(
-      'claude-code',
+      'cn',
       expect.any(Object),
       expect.any(Object),
     );

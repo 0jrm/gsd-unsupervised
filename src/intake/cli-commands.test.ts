@@ -1,10 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PassThrough } from 'node:stream';
 
-vi.mock('./classifier.js', () => ({
-  classifyGoal: vi.fn(),
-}));
 vi.mock('./clarifier.js', () => ({
+  classifyGoal: vi.fn(),
   clarifyGoal: vi.fn(),
 }));
 vi.mock('./goals-writer.js', () => ({
@@ -15,8 +13,7 @@ vi.mock('../init-wizard.js', () => ({
   runInit: vi.fn(),
 }));
 
-import { classifyGoal } from './classifier.js';
-import { clarifyGoal } from './clarifier.js';
+import { classifyGoal, clarifyGoal } from './clarifier.js';
 import { queueGoal } from './goals-writer.js';
 import { runInit } from '../init-wizard.js';
 

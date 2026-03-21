@@ -4,11 +4,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { ComplexityScore, PendingGoal, RawGoal } from './types.js';
-
-vi.mock('./classifier.js', () => ({
-  classifyGoal: vi.fn(),
-}));
+import type { ComplexityScore, PendingGoal } from './clarifier.js';
+import type { RawGoal } from './types.js';
 
 vi.mock('./goals-writer.js', () => ({
   queueGoal: vi.fn(),
@@ -16,14 +13,14 @@ vi.mock('./goals-writer.js', () => ({
 }));
 
 vi.mock('./clarifier.js', () => ({
+  classifyGoal: vi.fn(),
   readPendingGoals: vi.fn(),
   resolvePendingGoal: vi.fn(),
   writePendingGoal: vi.fn(),
 }));
 
-import { classifyGoal } from './classifier.js';
+import { classifyGoal, readPendingGoals, resolvePendingGoal, writePendingGoal } from './clarifier.js';
 import { queueGoal, notifyQueued } from './goals-writer.js';
-import { readPendingGoals, resolvePendingGoal, writePendingGoal } from './clarifier.js';
 import { createStatusApp } from '../status-server.js';
 
 function mkRawGoal(overrides: Partial<RawGoal>): RawGoal {

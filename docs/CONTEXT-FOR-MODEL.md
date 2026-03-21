@@ -14,7 +14,6 @@ Compact context for assistants working in this repo. This document tracks curren
   - `cursor` (NDJSON stream + retry policy)
   - `cn` (Continue CLI)
   - `codex` (Codex CLI via `codex exec`)
-  - `claude-code` and `gemini-cli` are stubs.
 - Shared plan execution path in orchestrator for normal + resume flow.
 - Execution truth derived from session-log terminal statuses, not summary-file presence.
 - Verify hook (`verifyCommand`) with fail-fast handling.

@@ -13,7 +13,7 @@ export interface GsdState {
   mode: GsdMode;
   /** Project name (e.g. "gsd-unsupervised" or "my-other-app"). */
   project: string;
-  /** Agent type: cursor, cn, claude-code, gemini-cli, codex. */
+  /** Agent type: cursor, cn, codex. */
   agent?: string;
   /** Absolute or relative path to workspace root (where .planning/ and goals live). */
   workspaceRoot: string;

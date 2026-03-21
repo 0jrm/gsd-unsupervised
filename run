@@ -6,6 +6,11 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 STATE="$ROOT/.gsd/state.json"
 ENV="$ROOT/.env"
 
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+  . "$HOME/.nvm/nvm.sh"
+  nvm use --silent default >/dev/null 2>&1 || true
+fi
+
 # Load env (no spaces in values)
 if [ -f "$ENV" ]; then
   export $(grep -v '^#' "$ENV" | xargs) 2>/dev/null || true

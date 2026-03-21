@@ -328,11 +328,15 @@ export async function orchestrateGoal(options: {
       { cmd: execCmd.command, plan: plan.planNumber },
       `Executing: ${execCmd.command} ${execCmd.args}`,
     );
-    const execResult = await agent(execCmd, config.workspaceRoot, agentLogger, {
-      goalTitle: goal.title,
-      phaseNumber: phaseNum,
-      planNumber: plan.planNumber,
-    });
+    const execResult = await agent(
+      execCmd,
+      config.workspaceRoot,
+      agentLogger,
+      goalLogContext({
+        phaseNumber: phaseNum,
+        planNumber: plan.planNumber,
+      }),
+    );
     if (!execResult.success) {
       sm.fail(execResult.error ?? 'Agent failed');
       try {
@@ -373,6 +377,20 @@ export async function orchestrateGoal(options: {
   const agent = options.agent ?? stubAgent;
   const sm = new GoalStateMachine(goal.title);
   const stateMdPath = path.join(config.workspaceRoot, '.planning', 'STATE.md');
+  const goalLogContextBase: SessionLogContext = {
+    goalTitle: goal.title,
+    ...(goal.route ? { route: goal.route } : {}),
+    ...(goal.contextBundlePath ? { contextBundlePath: goal.contextBundlePath } : {}),
+    ...(goal.sessionContextPath ? { sessionContextPath: goal.sessionContextPath } : {}),
+    ...(goal.agentBriefPath ? { agentBriefPath: goal.agentBriefPath } : {}),
+  };
+
+  function goalLogContext(extra: Partial<SessionLogContext> = {}): SessionLogContext {
+    return {
+      ...goalLogContextBase,
+      ...extra,
+    };
+  }
 
   /** Before execute-plan: ensure clean git or create checkpoint when config allows. */
   async function ensureCleanGitOrCheckpoint(): Promise<void> {
@@ -408,6 +426,122 @@ export async function orchestrateGoal(options: {
     const roadmapPath = path.join(config.workspaceRoot, '.planning', 'ROADMAP.md');
     const gitSha = await getGitSha(config.workspaceRoot);
     let result: AgentResult = { success: true };
+
+    if (goal.route === 'quick') {
+      if (isShuttingDown()) {
+        logShutdown(logger, sm);
+        return;
+      }
+
+      await ensureCleanGitOrCheckpoint();
+      await waitForCpuHeadroom();
+
+      sm.advance(GoalLifecyclePhase.InitializingProject);
+      sm.advance(GoalLifecyclePhase.CreatingRoadmap);
+      sm.advance(GoalLifecyclePhase.PlanningPhase);
+      sm.setPhaseInfo(1, 1);
+      sm.setPlanInfo(1, 1);
+      sm.advance(GoalLifecyclePhase.ExecutingPlan);
+
+      const quickCmd: GsdCommand = {
+        command: '/gsd:quick',
+        args: goal.description?.trim() || goal.title,
+        description: `Quick route for ${goal.title}`,
+      };
+      sm.setLastCommand(quickCmd);
+      logger.info(
+        { cmd: quickCmd.command, goal: goal.title, route: 'quick' },
+        `Executing: ${quickCmd.command}`,
+      );
+
+      await writeDaemonStateMd({
+        stateMdPath,
+        phaseNumber: 1,
+        totalPhases: 1,
+        phaseName: 'Quick',
+        planNumber: 1,
+        totalPlans: 1,
+        status: 'Running quick route',
+        lastActivity: new Date().toISOString(),
+        gitSha,
+      });
+      await reportProgress({
+        stateMdPath,
+        logger,
+        onProgress,
+        expectedPhase: 1,
+      });
+
+      result = await agent(
+        quickCmd,
+        config.workspaceRoot,
+        agentLogger,
+        goalLogContext({
+          phaseNumber: 1,
+          planNumber: 1,
+        }),
+      );
+      if (!result.success) {
+        sm.fail(result.error ?? 'Agent failed');
+        try {
+          await sendSms(
+            `GSD goal failed.\nGoal: ${goal.title}\nError: ${result.error ?? 'Agent failed'}`,
+          );
+        } catch (smsErr) {
+          logger.warn({ err: smsErr }, 'SMS notification failed');
+        }
+        return;
+      }
+
+      if (config.verifyCommand?.trim()) {
+        const verify = await runVerifyIfConfigured({ config, logger });
+        if (!verify.passed) {
+          await appendSessionLog(sessionLogPath, {
+            timestamp: new Date().toISOString(),
+            goalTitle: goal.title,
+            phase: '/gsd:quick',
+            phaseNumber: 1,
+            planNumber: 1,
+            sessionId: null,
+            command: `/gsd:quick ${quickCmd.args ?? ''}`.trim(),
+            status: 'verify-failed',
+            error: (verify.stderr ?? '').slice(0, 500),
+            failureContext: `quick route phase 1 plan 1: ${(verify.stderr ?? 'verify failed').slice(0, 300)}`,
+          });
+          if (config.autoFixOnVerifyFail && onQueueFixGoal) {
+            onQueueFixGoal(`Fix: verify failed after quick route for ${goal.title}`, verify.stderr ?? '');
+          }
+          sm.fail('Verify failed after quick route');
+          try {
+            await sendSms(`GSD goal failed.\nGoal: ${goal.title}\nVerify failed`);
+          } catch (smsErr) {
+            logger.warn({ err: smsErr }, 'SMS notification failed');
+          }
+          return;
+        }
+      }
+
+      sm.advance(GoalLifecyclePhase.PhaseComplete);
+      sm.advance(GoalLifecyclePhase.Complete);
+      logger.info({ goal: goal.title, route: 'quick' }, `Goal complete: ${goal.title}`);
+      await writeDaemonStateMd({
+        stateMdPath,
+        phaseNumber: 1,
+        totalPhases: 1,
+        phaseName: 'Quick',
+        planNumber: 1,
+        totalPlans: 1,
+        status: 'Complete',
+        lastActivity: new Date().toISOString(),
+        gitSha: await getGitSha(config.workspaceRoot),
+      });
+      try {
+        await sendSms(`GSD goal complete.\nGoal: ${goal.title}`);
+      } catch (smsErr) {
+        logger.warn({ err: smsErr }, 'SMS notification failed');
+      }
+      return;
+    }
 
     if (resumeFrom && resumeFrom.phaseNumber >= 1 && resumeFrom.planNumber >= 0) {
       const phases = await parseRoadmap(roadmapPath);
@@ -486,10 +620,12 @@ export async function orchestrateGoal(options: {
               description: `Plan phase ${p.number}`,
             };
             sm.setLastCommand(planCmd);
-            const planResult = await agent(planCmd, config.workspaceRoot, agentLogger, {
-              goalTitle: goal.title,
-              phaseNumber: pNum,
-            });
+            const planResult = await agent(
+              planCmd,
+              config.workspaceRoot,
+              agentLogger,
+              goalLogContext({ phaseNumber: pNum }),
+            );
             if (!planResult.success) {
               sm.fail(planResult.error ?? 'Agent failed');
               try {
@@ -616,10 +752,12 @@ export async function orchestrateGoal(options: {
           description: `Plan phase ${p.number}`,
         };
         sm.setLastCommand(planCmd);
-        result = await agent(planCmd, config.workspaceRoot, agentLogger, {
-          goalTitle: goal.title,
-          phaseNumber: pNum,
-        });
+        result = await agent(
+          planCmd,
+          config.workspaceRoot,
+          agentLogger,
+          goalLogContext({ phaseNumber: pNum }),
+        );
         if (!result.success) {
           sm.fail(result.error ?? 'Agent failed');
           try {
@@ -707,7 +845,7 @@ export async function orchestrateGoal(options: {
     if (!alreadyInitialized) {
       sm.setLastCommand(initCmd);
       logger.info({ cmd: initCmd.command }, `Executing: ${initCmd.command}`);
-      result = await agent(initCmd, config.workspaceRoot, agentLogger, { goalTitle: goal.title });
+      result = await agent(initCmd, config.workspaceRoot, agentLogger, goalLogContext());
       if (!result.success) {
         sm.fail(result.error ?? 'Agent failed');
         try {
@@ -755,7 +893,7 @@ export async function orchestrateGoal(options: {
     if (!alreadyHasRoadmap) {
       sm.setLastCommand(roadmapCmd);
       logger.info({ cmd: roadmapCmd.command }, `Executing: ${roadmapCmd.command}`);
-      result = await agent(roadmapCmd, config.workspaceRoot, agentLogger, { goalTitle: goal.title });
+      result = await agent(roadmapCmd, config.workspaceRoot, agentLogger, goalLogContext());
       if (!result.success) {
         sm.fail(result.error ?? 'Agent failed');
         try {
@@ -828,10 +966,12 @@ export async function orchestrateGoal(options: {
           { cmd: planCmd.command, phase: phase.number },
           `Executing: ${planCmd.command} ${planCmd.args}`,
         );
-        result = await agent(planCmd, config.workspaceRoot, agentLogger, {
-          goalTitle: goal.title,
-          phaseNumber: phaseNum,
-        });
+        result = await agent(
+          planCmd,
+          config.workspaceRoot,
+          agentLogger,
+          goalLogContext({ phaseNumber: phaseNum }),
+        );
         if (!result.success) {
           sm.fail(result.error ?? 'Agent failed');
           try {

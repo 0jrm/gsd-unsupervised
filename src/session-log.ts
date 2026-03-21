@@ -1,11 +1,17 @@
 import { readFile, appendFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
+import type { GoalRoute } from './goal-metadata.js';
+
 /** Context passed when invoking the agent for session log entries (goal/phase/plan). */
 export interface SessionLogContext {
   goalTitle: string;
   phaseNumber?: number;
   planNumber?: number;
+  route?: GoalRoute;
+  contextBundlePath?: string;
+  sessionContextPath?: string;
+  agentBriefPath?: string;
 }
 
 /**

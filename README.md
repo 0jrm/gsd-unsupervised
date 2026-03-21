@@ -5,17 +5,19 @@ Autonomous orchestrator that drives headless agents through the full [GSD (Get S
 ## Features
 
 - **Goal queue** — Define work in `goals.md`; the daemon processes pending goals sequentially or in parallel.
-- **GSD lifecycle** — Runs `/gsd/new-project` → `/gsd/create-roadmap` → `/gsd/plan-phase` → `/gsd/execute-plan` in the correct order.
+- **Intake front door** — `./start` / `gsd-unsupervised start` turns a vague request into a queued goal plus a durable intake bundle.
+- **Quick + full GSD routing** — Trivial goals route through `/gsd:quick`; larger goals use `/gsd/new-project` → `/gsd/create-roadmap` → `/gsd/plan-phase` → `/gsd/execute-plan`.
 - **Agent runtime integration** — Supports Cursor (`cursor-agent`), Continue CLI (`cn`), and Codex CLI (`codex`) with heartbeat + session-log lifecycle handling.
+- **Vendored upstream GSD sync** — Caches upstream `gsd-build/get-shit-done` under `.gsd/upstream/` and mirrors runtime assets into `.cursor/` and `.codex/`.
 - **State monitoring** — Watches `.planning/STATE.md` for phase/plan progress and emits events (phase_advanced, plan_advanced, phase_completed, goal_completed).
 - **Crash detection & recovery** — Session log at project root, resume from exact phase/plan on next run, heartbeat for liveness.
 - **Resource governor** — CPU + memory headroom checks before each agent call so the daemon backs off instead of thrashing your box.
 - **Local status dashboard** — Optional HTTP server (`--status-server <port>`) serving an HTML dashboard and `/api/status` JSON. Use `--ngrok` to have the daemon run `ngrok http <port>` so the dashboard is reachable via a public URL while the process runs. The dashboard is most useful during long-running agent execution; if a goal completes quickly or before the server is up, the dashboard may be empty.
-- **Optional SMS (Twilio)** — Notifications for goal complete, goal failed, and daemon paused; requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `TWILIO_TO`. If unset, the daemon runs without SMS (no warnings or errors).
+- **Optional SMS (Twilio)** — Outbound notifications for goal complete, goal failed, and daemon paused; requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `TWILIO_TO`. Inbound queueing: when the status server is enabled, Twilio can POST to `/webhook/sms` (set `TWILIO_AUTH_TOKEN` for signature validation in production). If Twilio env vars are unset, the daemon runs without SMS (no warnings or errors).
 
 ## Requirements
 
-Node ≥ 18, tmux, and one runtime (`cursor`, `cn`, or `codex`) for live execution. (`claude-code` and `gemini-cli` currently map to stubs.)
+Node ≥ 18, tmux, and one runtime (`cursor`, `cn`, or `codex`) for live execution. The intake breadcrumb flow is guaranteed for `cursor` and `codex`; `cn` can still run queued goals, but it does not yet have full upstream-sync or breadcrumb parity.
 
 ## Prerequisites
 
@@ -37,7 +39,7 @@ You can use [Continue's headless CLI](https://docs.continue.dev/guides/cli) (`cn
 4. **CONTINUE_API_KEY**: Required for CI/headless use. Get from [continue.dev/settings/api-keys](https://continue.dev/settings/api-keys).
 5. **Binary path**: Use `GSD_CN_BIN` env or `continueCliPath` in config if `cn` is not on PATH.
 
-cn outputs plain text (not NDJSON). GSD rules load from `.continue/config.yaml`, which references `.cursor/rules/`.
+cn outputs plain text (not NDJSON). GSD rules load from `.continue/config.yaml`, which references `.cursor/rules/`. `./start` will warn when the configured agent is `cn`, because the new intake-breadcrumb flow only guarantees Cursor/Codex behavior in this release.
 
 ### Using codex (Codex CLI)
 
@@ -83,7 +85,7 @@ echo "CURSOR_API_KEY=your_key" >> .env
 # For cn use CONTINUE_API_KEY; for codex use OPENAI_API_KEY.
 
 # 3. Add a goal
-echo "- [ ] Add dark mode to the dashboard" >> goals.md
+./start "Add dark mode to the dashboard"
 
 # 4. Start the daemon
 ./run
@@ -91,6 +93,24 @@ echo "- [ ] Add dark mode to the dashboard" >> goals.md
 ```
 
 That's it. The daemon will read goals.md, invoke your agent, and SMS you when done (if Twilio is configured).
+
+### Intake Flow (`./start`)
+
+`./start` is the queueing and clarification entrypoint for this repo:
+
+```bash
+./start "Implement intake bundles for queued goals"
+./start "Fix flaky dashboard polling" --body "Keep the current status API contract"
+```
+
+What it does:
+
+- Syncs upstream GSD into `.cursor/` and `.codex/`, recording the ref in `.gsd/upstream/manifest.json`.
+- Normalizes and classifies the request, optionally asks for clarification, and chooses a route (`quick` or `full`).
+- Writes a durable intake bundle under `.planning/intake/<timestamp>-<slug>/`.
+- Updates `goals.md` with a metadata block pointing at the new bundle.
+- If the daemon is already healthy, it exits after updating the queue.
+- If the daemon is not running but `.gsd/state.json` exists, it offers `update only` or `update and run`.
 
 ## Install
 
@@ -183,6 +203,10 @@ Requires [ngrok](https://ngrok.com/) on your PATH and an ngrok authtoken (e.g. `
 ### Operational commands
 
 ```bash
+# Queue a goal through the intake bundle flow
+./start "Add a status badge to the dashboard"
+gsd-unsupervised start "Add a status badge to the dashboard" --body "Reuse existing styling"
+
 # Run from .gsd/state.json (used by ./run)
 gsd-unsupervised run [--state ./.gsd/state.json]
 
@@ -203,7 +227,7 @@ gsd-unsupervised validate-agent --agent codex --network
 | `--max-concurrent <n>` | `3` | Max concurrent goals when `--parallel` |
 | `--verbose` | `false` | Debug logging and pretty output |
 | `--dry-run` | `false` | Parse goals and show plan only; no agent calls |
-| `--agent <name>` | `cursor` | Agent type: `cursor`, `cn`, `claude-code`, `gemini-cli`, `codex`. Invalid names fail fast. |
+| `--agent <name>` | `cursor` | Agent type: `cursor`, `cn`, `codex`. Invalid names fail fast. |
 | `--agent-path <path>` | `agent` | Path to cursor-agent binary |
 | `--agent-timeout <ms>` | `600000` | Agent invocation timeout (ms) |
 | `--status-server <port>` | — | Enable local HTTP status server: GET / = dashboard HTML, GET /status or /api/status = JSON |
@@ -217,8 +241,6 @@ gsd-unsupervised validate-agent --agent codex --network
 | `cursor` | Supported | Default. CURSOR_API_KEY required. |
 | `cn` | Supported | Continue CLI. `npm install -g @continuedev/cli`, set CONTINUE_API_KEY. |
 | `codex` | Supported | Codex CLI via `codex exec`; set OPENAI_API_KEY for unattended runs. |
-| `claude-code` | Stub | Coming soon. |
-| `gemini-cli` | Stub | Coming soon. |
 
 Invalid names fail fast at startup.
 
@@ -231,6 +253,15 @@ Example:
 ```markdown
 ## Pending
 - [ ] Your next goal
+  ### Your next goal
+  **Goal:** A normalized description of the queued work
+  **Success criteria:**
+  1. A concrete outcome
+  1. Another concrete outcome
+  **Route:** quick
+  **Context bundle:** .planning/intake/20260320-120000-your-next-goal
+  **Session context:** .planning/intake/20260320-120000-your-next-goal/SESSION-CONTEXT.md
+  **Agent brief:** .planning/intake/20260320-120000-your-next-goal/AGENT-BRIEF.md
 
 ## In Progress
 <!-- moved here while running -->
@@ -240,6 +271,29 @@ Example:
 ```
 
 All roadmap phases (1–7) are implemented: Foundation, Lifecycle, Agent Integration, State Monitoring, Crash Detection & Recovery, Status Server, WSL Bootstrap. Use `goals.md` for new work items.
+
+### Intake Bundles And Breadcrumbs
+
+Each `./start` run writes a bundle under `.planning/intake/<timestamp>-<slug>/` with:
+
+- `REQUEST.md`
+- `FIRST-PRINCIPLES.md`
+- `STANDARDS.md`
+- `SESSION-CONTEXT.md`
+- `AGENT-BRIEF.md`
+- `manifest.json`
+
+Stable pointers are also updated:
+
+- `.planning/intake/LATEST.json`
+- `.planning/intake/LATEST.md`
+
+Runtime-specific breadcrumbs:
+
+- Cursor reads the repo-owned bridge rule at `.cursor/rules/gsd-intake-bridge.mdc`.
+- Codex reads the repo-owned skill at `.codex/skills/gsd-session-context/SKILL.md`.
+- Spawned agents should start with `AGENT-BRIEF.md` and escalate to `SESSION-CONTEXT.md` only when needed.
+- `cn` is intentionally excluded from this breadcrumb guarantee for now.
 
 ## Configuration
 
@@ -256,7 +310,7 @@ Config can come from a JSON file (`--config`) and is overridden by CLI options. 
 | `verbose` | `false` | Verbose logging |
 | `logLevel` | `"info"` | `debug` \| `info` \| `warn` \| `error` |
 | `workspaceRoot` | `process.cwd()` | Project root (for `.planning/`, etc.) |
-| `agent` | `"cursor"` | Agent type: `cursor`, `cn`, `claude-code`, `gemini-cli`, `codex` |
+| `agent` | `"cursor"` | Agent type: `cursor`, `cn`, `codex` |
 | `cursorAgentPath` | `"cursor-agent"` | cursor-agent binary path |
 | `continueCliPath` | `"cn"` | cn (Continue CLI) binary path; used when `agent` is `cn` |
 | `codexCliPath` | `"codex"` | codex binary path; used when `agent` is `codex` |

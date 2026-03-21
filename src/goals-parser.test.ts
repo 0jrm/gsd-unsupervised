@@ -41,6 +41,27 @@ describe('goals-parser', () => {
       expect(got.warnings).toHaveLength(0);
     });
 
+    it('parses bundle breadcrumb fields from metadata blocks', () => {
+      const md = `## Pending
+- [ ] Add intake-driven quick mode
+  ### Add intake-driven quick mode
+  **Goal:** Route trivial work through quick mode.
+  **Success criteria:**
+  1. Quick route is selected
+  **Route:** quick
+  **Context bundle:** .planning/intake/20260320-add-intake
+  **Session context:** .planning/intake/20260320-add-intake/SESSION-CONTEXT.md
+  **Agent brief:** .planning/intake/20260320-add-intake/AGENT-BRIEF.md
+`;
+      const got = parseGoalsFile(md);
+      expect(got.goals).toHaveLength(1);
+      expect(got.goals[0].route).toBe('quick');
+      expect(got.goals[0].contextBundlePath).toBe('.planning/intake/20260320-add-intake');
+      expect(got.goals[0].sessionContextPath).toContain('SESSION-CONTEXT.md');
+      expect(got.goals[0].agentBriefPath).toContain('AGENT-BRIEF.md');
+      expect(got.goals[0].metadataBlock).toContain('**Route:** quick');
+    });
+
     it('handles empty sections', () => {
       const md = `## Pending
 

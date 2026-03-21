@@ -4,13 +4,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import type { PendingGoal } from './types.js';
-
-vi.mock('./classifier.js', () => ({
-  classifyGoal: vi.fn(),
-}));
+import type { PendingGoal } from './clarifier.js';
 
 vi.mock('./clarifier.js', () => ({
+  classifyGoal: vi.fn(),
   clarifyGoal: vi.fn(),
   readPendingGoals: vi.fn(),
   resolvePendingGoal: vi.fn(),
@@ -22,8 +19,13 @@ vi.mock('./goals-writer.js', () => ({
   notifyQueued: vi.fn(),
 }));
 
-import { classifyGoal } from './classifier.js';
-import { clarifyGoal, readPendingGoals, resolvePendingGoal, writePendingGoal } from './clarifier.js';
+import {
+  classifyGoal,
+  clarifyGoal,
+  readPendingGoals,
+  resolvePendingGoal,
+  writePendingGoal,
+} from './clarifier.js';
 import { queueGoal } from './goals-writer.js';
 import { createStatusApp } from '../status-server.js';
 

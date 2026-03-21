@@ -113,6 +113,25 @@ describe('goals', () => {
       expect(warnings).toHaveLength(0);
     });
 
+    it('maps parsed breadcrumb fields onto Goal objects', () => {
+      const md = `## Pending
+- [ ] Bootstrap start flow
+  ### Bootstrap start flow
+  **Goal:** Create a bundle-aware start flow.
+  **Route:** full
+  **Context bundle:** .planning/intake/boot-start
+  **Session context:** .planning/intake/boot-start/SESSION-CONTEXT.md
+  **Agent brief:** .planning/intake/boot-start/AGENT-BRIEF.md
+`;
+      const { goals, warnings } = parseGoals(md);
+      expect(goals).toHaveLength(1);
+      expect(goals[0].route).toBe('full');
+      expect(goals[0].contextBundlePath).toBe('.planning/intake/boot-start');
+      expect(goals[0].sessionContextPath).toContain('SESSION-CONTEXT.md');
+      expect(goals[0].agentBriefPath).toContain('AGENT-BRIEF.md');
+      expect(warnings).toHaveLength(0);
+    });
+
     it('reports lines outside section as warnings', () => {
       const md = `# Header
 - [ ] Orphan (no section above)

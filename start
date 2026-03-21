@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+ENV="$ROOT/.env"
+
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+  . "$HOME/.nvm/nvm.sh"
+  nvm use --silent default >/dev/null 2>&1 || true
+fi
+
+if [ -f "$ENV" ]; then
+  export $(grep -v '^#' "$ENV" | xargs) 2>/dev/null || true
+fi
+
+if [ -f "$ROOT/package.json" ]; then
+  (cd "$ROOT" && npm run build >/dev/null)
+fi
+
+cd "$ROOT"
+npx --yes gsd-unsupervised start "$@"

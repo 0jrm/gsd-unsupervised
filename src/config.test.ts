@@ -12,14 +12,16 @@ describe('config agent', () => {
     expect(config.agent).toBe('cursor');
   });
 
-  it('accepts agent claude-code', () => {
-    const config = loadConfig({ cliOverrides: { agent: 'claude-code' } });
-    expect(config.agent).toBe('claude-code');
+  it('rejects claude-code with clear error', () => {
+    expect(() => loadConfig({ cliOverrides: { agent: 'claude-code' } })).toThrow(
+      /Invalid enum value.*received 'claude-code'/,
+    );
   });
 
-  it('accepts agent gemini-cli', () => {
-    const config = loadConfig({ cliOverrides: { agent: 'gemini-cli' } });
-    expect(config.agent).toBe('gemini-cli');
+  it('rejects gemini-cli with clear error', () => {
+    expect(() => loadConfig({ cliOverrides: { agent: 'gemini-cli' } })).toThrow(
+      /Invalid enum value.*received 'gemini-cli'/,
+    );
   });
 
   it('accepts agent codex', () => {

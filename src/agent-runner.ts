@@ -10,7 +10,7 @@ import {
 } from './stream-events.js';
 
 /** Supported agent IDs for the pluggable invoker seam. */
-export type AgentId = 'cursor' | 'cn' | 'claude-code' | 'gemini-cli' | 'codex';
+export type AgentId = 'cursor' | 'cn' | 'codex';
 
 /** Policy for retrying agent runs with backoff and non-retryable exit codes. */
 export interface RetryPolicy {
@@ -25,13 +25,7 @@ export const DEFAULT_RETRY_POLICY: RetryPolicy = {
   nonRetryableExitCodes: [1, 127],
 };
 
-export const SUPPORTED_AGENTS: readonly AgentId[] = [
-  'cursor',
-  'cn',
-  'claude-code',
-  'gemini-cli',
-  'codex',
-] as const;
+export const SUPPORTED_AGENTS: readonly AgentId[] = ['cursor', 'cn', 'codex'] as const;
 
 export function isSupportedAgent(id: string): id is AgentId {
   return (SUPPORTED_AGENTS as readonly string[]).includes(id);

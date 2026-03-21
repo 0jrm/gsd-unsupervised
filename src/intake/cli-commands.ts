@@ -6,8 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 import { normalizeCliInput } from './normalizer.js';
-import { classifyGoal } from './classifier.js';
-import { clarifyGoal } from './clarifier.js';
+import { classifyGoal, clarifyGoal } from './clarifier.js';
 import { queueGoal } from './goals-writer.js';
 import { runInit } from '../init-wizard.js';
 

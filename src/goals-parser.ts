@@ -5,12 +5,18 @@
 
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
+import { parseGoalMetadataBlock, type GoalRoute } from './goal-metadata.js';
 
 export const ParsedGoalSchema = z.object({
   title: z.string().min(1),
   status: z.enum(['pending', 'in_progress', 'done']),
   description: z.string().optional(),
   successCriteria: z.array(z.string()).optional(),
+  route: z.enum(['quick', 'full']).optional(),
+  contextBundlePath: z.string().optional(),
+  sessionContextPath: z.string().optional(),
+  agentBriefPath: z.string().optional(),
+  metadataBlock: z.string().optional(),
   /** Original checkbox line for display and append. */
   raw: z.string(),
 });
@@ -36,25 +42,6 @@ const SECTION_MAP: Record<string, ParsedGoal['status']> = {
 };
 
 const CHECKBOX_RE = /^- \[([ xX])\]\s+(.+)$/;
-
-/** Extract success criteria from a block: **Success criteria:** followed by numbered or - list. */
-function extractSuccessCriteria(block: string): string[] {
-  const criteria: string[] = [];
-  const listMatch = block.match(/\*\*Success criteria:\*\*\s*([\s\S]*?)(?=\n\*\*|\n\n|$)/is);
-  const list = listMatch?.[1]?.trim();
-  if (!list) return criteria;
-  for (const line of list.split('\n')) {
-    const m = line.match(/^\s*(?:\d+\.|\-)\s+(.+)$/);
-    if (m) criteria.push(m[1].trim());
-  }
-  return criteria;
-}
-
-/** Extract optional **Goal:** line from block. */
-function extractGoalDescription(block: string): string | undefined {
-  const m = block.match(/\*\*Goal:\*\*\s*(.+?)(?=\n\*\*|\n\n|$)/is);
-  return m ? m[1].trim() : undefined;
-}
 
 /**
  * Parses goals markdown into validated ParsedGoals.
@@ -101,6 +88,11 @@ export function parseGoalsFile(content: string): ParsedGoals & { warnings: Parse
       }
       let description: string | undefined;
       let successCriteria: string[] | undefined;
+      let route: GoalRoute | undefined;
+      let contextBundlePath: string | undefined;
+      let sessionContextPath: string | undefined;
+      let agentBriefPath: string | undefined;
+      let metadataBlock: string | undefined;
 
       if (i + 1 < lines.length) {
         const next = lines[i + 1].trim();
@@ -116,8 +108,17 @@ export function parseGoalsFile(content: string): ParsedGoals & { warnings: Parse
             j++;
           }
           const block = blockLines.join('\n');
-          description = extractGoalDescription(block) ?? (block.length > 0 ? block : undefined);
-          successCriteria = extractSuccessCriteria(block).length > 0 ? extractSuccessCriteria(block) : undefined;
+          const parsedMetadata = parseGoalMetadataBlock(block);
+          metadataBlock = block;
+          description = parsedMetadata.goal ?? (block.length > 0 ? block : undefined);
+          successCriteria =
+            parsedMetadata.successCriteria && parsedMetadata.successCriteria.length > 0
+              ? parsedMetadata.successCriteria
+              : undefined;
+          route = parsedMetadata.route;
+          contextBundlePath = parsedMetadata.contextBundlePath;
+          sessionContextPath = parsedMetadata.sessionContextPath;
+          agentBriefPath = parsedMetadata.agentBriefPath;
           i = j - 1;
         }
       }
@@ -128,6 +129,11 @@ export function parseGoalsFile(content: string): ParsedGoals & { warnings: Parse
         raw,
         ...(description && { description }),
         ...(successCriteria && successCriteria.length > 0 && { successCriteria }),
+        ...(route && { route }),
+        ...(contextBundlePath && { contextBundlePath }),
+        ...(sessionContextPath && { sessionContextPath }),
+        ...(agentBriefPath && { agentBriefPath }),
+        ...(metadataBlock && { metadataBlock }),
       });
       continue;
     }

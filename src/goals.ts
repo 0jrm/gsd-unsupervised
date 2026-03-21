@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { validateGoalsFile, parseGoalsFile } from './goals-parser.js';
+import type { GoalRoute } from './goal-metadata.js';
 
 export interface Goal {
   title: string;
@@ -15,6 +16,12 @@ export interface Goal {
   priority?: number;
   /** Optional metadata block (e.g. ### section) that immediately followed this goal line. */
   metadataBlock?: string;
+  route?: GoalRoute;
+  contextBundlePath?: string;
+  sessionContextPath?: string;
+  agentBriefPath?: string;
+  successCriteria?: string[];
+  description?: string;
 }
 
 /** Re-export for tests that assert on parse warnings. */
@@ -35,7 +42,13 @@ function mapParsedToGoals(parsed: ParsedGoal[]): Goal[] {
     });
     return {
       ...withAnnotations,
-      metadataBlock: p.description ? `### ${p.title}\n${p.description}` : undefined,
+      metadataBlock: p.metadataBlock,
+      successCriteria: p.successCriteria,
+      description: p.description,
+      route: p.route,
+      contextBundlePath: p.contextBundlePath,
+      sessionContextPath: p.sessionContextPath,
+      agentBriefPath: p.agentBriefPath,
     };
   });
 }

@@ -9,7 +9,6 @@ The orchestrator drives GSD via an **AgentInvoker** function-type seam: it does 
 - **cursor** — Full implementation: spawns `cursor-agent` with NDJSON streaming, retry policy, heartbeat, and session logging.
 - **cn** — Full implementation: spawns Continue CLI (`cn`) in headless mode with heartbeat + session log lifecycle.
 - **codex** — Full implementation: spawns Codex CLI (`codex exec`) in non-interactive mode with heartbeat + session log lifecycle.
-- **claude-code**, **gemini-cli** — Thin stubs (TODO) with the same call signature; non-throwing.
 
 **Rationale:** Decouples orchestrator core (heartbeat, resume, status server, git checkpoints) from any single agent so Phase 6+ features (dashboard, bootstrap) work with Cursor today and other agents later.
 
@@ -18,7 +17,6 @@ The orchestrator drives GSD via an **AgentInvoker** function-type seam: it does 
 │ Orchestrator│────▶│ createAgentInvoker│────▶│ cursor-agent    │
 │             │     │ (agentId, config) │     │ cn              │
 │             │     │                  │     │ codex           │
-│             │     │                  │     │ claude/gemini   │
 └─────────────┘     └──────────────────┘     └─────────────────┘
        │                       │                       │
        │                       │                       ▼
@@ -33,14 +31,18 @@ The orchestrator drives GSD via an **AgentInvoker** function-type seam: it does 
 
 ## Data flow
 
-1. **CLI** loads config (file + CLI overrides), validates local agent credentials/binary for live runs, then either prints the goals table (dry-run) or calls **daemon**.
-2. **Daemon** loads goals from `goals.md`, creates one agent invoker via `createAgentInvoker(config.agent, config)`, then for each pending goal:
+1. **CLI** loads config (file + CLI overrides), validates local agent credentials/binary for live runs, then either prints the goals table (dry-run), runs the intake front door (`start`), or calls **daemon**.
+2. **start command** (`./start` / `gsd-unsupervised start`) syncs upstream GSD into `.cursor/` and `.codex/`, classifies the request, writes an intake bundle under `.planning/intake/<timestamp>-<slug>/`, updates `goals.md`, and optionally launches the daemon when no healthy daemon is already running.
+3. **Daemon** loads goals from `goals.md`, creates one agent invoker via `createAgentInvoker(config.agent, config)`, then for each pending goal:
    - Builds path to `.planning/STATE.md`.
    - Creates **StateWatcher** (chokidar on STATE.md), registers progress listeners, starts it.
    - Calls **orchestrator** with the goal, config, logger, agent, and optional `onProgress`.
    - On exit (success or failure), stops the watcher.
-3. **Orchestrator** runs the GSD lifecycle state machine: loads roadmap, discovers phases/plans, and for each step invokes the **agent** with the right GSD command (`/gsd/new-project`, `/gsd/create-roadmap`, `/gsd/plan-phase`, `/gsd/execute-plan`, etc.). Plan execution (normal + resume) is routed through a shared `runPlan` path for consistent validation, verify handling, and fail-fast behavior. After each successful agent call it calls `reportProgress(expectedPhase)` (reads STATE.md, calls `onProgress` when provided, and logs a non-fatal structured warning when the STATE.md phase number does not match the orchestrator’s expected phase, including `{ expectedPhase, actualPhase, actualPhaseName, plan, status }` in the log context).
-4. **StateWatcher** parses STATE.md on add/change (debounced), compares with previous snapshot, and emits `state_changed`, `phase_advanced`, `plan_advanced`, `phase_completed`, `goal_completed` as appropriate.
+4. **Orchestrator** runs route-aware execution:
+   - `quick` goals call `/gsd:quick` directly.
+   - `full` goals run the lifecycle state machine: roadmap, phase planning, and shared `runPlan` execution.
+   In both cases it passes breadcrumb metadata (`route`, bundle path, session context path, agent brief path) to the selected invoker so fresh sessions and spawned agents can reconstruct context from disk. Plan execution (normal + resume) is routed through a shared `runPlan` path for consistent validation, verify handling, and fail-fast behavior. After each successful agent call it calls `reportProgress(expectedPhase)` (reads STATE.md, calls `onProgress` when provided, and logs a non-fatal structured warning when the STATE.md phase number does not match the orchestrator’s expected phase, including `{ expectedPhase, actualPhase, actualPhaseName, plan, status }` in the log context).
+5. **StateWatcher** parses STATE.md on add/change (debounced), compares with previous snapshot, and emits `state_changed`, `phase_advanced`, `plan_advanced`, `phase_completed`, `goal_completed` as appropriate.
 
 ## Module roles
 
@@ -49,14 +51,19 @@ The orchestrator drives GSD via an **AgentInvoker** function-type seam: it does 
 | **cli.ts** | Commander options, logger init, config load, API key check, dry-run vs runDaemon. |
 | **config.ts** | Zod schema for all options; load from file and merge CLI overrides; safeParse with clear errors. |
 | **daemon.ts** | Goal loop, StateWatcher per goal (start before orchestrateGoal, stop in finally), progress event logging, shutdown handlers. |
-| **orchestrator.ts** | Goal state machine, roadmap/phase/plan discovery, shared `runPlan` executor, strict fail-fast for invalid plans/verify failures, reportProgress (read STATE.md, onProgress, mismatch warning). Uses stub agent when no invoker passed (tests/dry-run). |
+| **orchestrator.ts** | Route-aware goal execution (`/gsd:quick` vs full lifecycle), roadmap/phase/plan discovery, shared `runPlan` executor, strict fail-fast for invalid plans/verify failures, reportProgress (read STATE.md, onProgress, mismatch warning). Uses stub agent when no invoker passed (tests/dry-run). |
 | **lifecycle.ts** | Goal phases (e.g. initializing_project, creating_roadmap, planning_phase, executing_plan), command sequence, getNextCommand. |
-| **goals.ts** | Parse goals.md by section (Pending / In Progress / Done), return list of goals with status. |
+| **goals.ts** | Parse goals.md by section (Pending / In Progress / Done), including route + breadcrumb metadata from `###` blocks. |
+| **goal-metadata.ts** | Parse/build the structured metadata block stored under queued goals in `goals.md`. |
+| **goal-context.ts** | Builds the disk-backed prompt preamble that points agents at `AGENT-BRIEF.md` and `SESSION-CONTEXT.md`. |
 | **roadmap-parser.ts** | Parse ROADMAP.md, find phase dirs, discover PLAN.md files, get next unexecuted plan. |
 | **state-parser.ts** | Parse "## Current Position" in STATE.md → StateSnapshot (phase, plan, status, progressPercent). readStateMd(path) returns null on missing/parse failure. |
 | **resume-pointer.ts** | Pure computeResumePointer(opts): loads session log and STATE.md, derives last plan-complete/phase-complete, returns ResumePointer or null. Side-effect free. |
 | **state-watcher.ts** | Chokidar on STATE.md, debounce, readStateMd on change, emit typed progress events; start/stop, getLastSnapshot. |
 | **cursor-agent.ts** | createAgentInvoker(agentId, config), runtime adapters for `cursor`, `cn`, `codex`, and API key validators (`CURSOR_API_KEY`, `CONTINUE_API_KEY`, `OPENAI_API_KEY`). Includes retry (cursor), timeout aborts, heartbeat, and session-log lifecycle. |
+| **gsd-sync.ts** | Fetch/cache upstream `gsd-build/get-shit-done`, mirror runtime assets into `.cursor/` and `.codex/`, and record `.gsd/upstream/manifest.json`. |
+| **intake/bundle.ts** | Writes `.planning/intake/` bundles plus `LATEST.json` / `LATEST.md` stable pointers. |
+| **intake/start-command.ts** | Daemon-aware intake front door used by `./start` and `gsd-unsupervised start`. |
 | **stream-events.ts** | Parse NDJSON stream from cursor-agent, emit typed events; parseEvent returns null on bad lines. |
 | **logger.ts** | Pino init (level, pretty), createChildLogger for component names. |
 
@@ -67,6 +74,9 @@ The orchestrator drives GSD via an **AgentInvoker** function-type seam: it does 
 - **Stub agent default** — Orchestrator uses a stub when no invoker is passed (tests and dry-run).
 - **Single invoker per run** — One selected-runtime invoker is created in the daemon and reused for all goals in the run.
 - **Execution truth from session log** — Plan completion is derived from terminal execute-plan statuses in `session-log.jsonl`, not `*-SUMMARY.md` existence.
+- **Disk breadcrumbs over transient chat context** — `goals.md` remains the queue of record, while `.planning/intake/` holds the durable session and subagent context for queued goals.
+- **Repo-owned overlay files** — Runtime bridge files live outside the synced upstream tree so upstream refreshes remain repeatable.
+- **Cursor/Codex parity first** — Upstream sync and breadcrumb guarantees are implemented for `cursor` and `codex`. `cn` can still run queued work but does not yet have equivalent breadcrumb consumption.
 - **Per-goal watcher** — Each goal gets its own StateWatcher, started before and stopped after orchestrateGoal.
 
 ## Crash detection and recovery
@@ -89,7 +99,7 @@ The orchestrator drives GSD via an **AgentInvoker** function-type seam: it does 
 
 ## GSD as black box
 
-The orchestrator drives GSD only via commands and file system: it writes no GSD internals, and reads only ROADMAP.md, STATE.md, and phase/plan files under `.planning/`. GSD rules live in `.cursor/rules/` and are not modified by this project.
+The orchestrator drives GSD only via commands and file system: it writes no GSD internals, and reads only ROADMAP.md, STATE.md, and phase/plan files under `.planning/`. Upstream GSD assets are mirrored into `.cursor/` and `.codex/` from `.gsd/upstream/get-shit-done`, while repo-owned overlay files stay outside the synced upstream surface.
 
 ## STATE.md “Current Position” contract
 

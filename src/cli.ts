@@ -151,7 +151,7 @@ program
   .option('--max-concurrent <n>', 'Max concurrent projects when parallel', '3')
   .option('--verbose', 'Enable verbose/debug logging', false)
   .option('--dry-run', 'Parse goals and show plan without executing', false)
-  .option('--agent <name>', 'Agent type: cursor (default), cn, claude-code, gemini-cli, codex', 'cursor')
+  .option('--agent <name>', 'Agent type: cursor (default), cn, codex', 'cursor')
   .option('--agent-path <path>', 'Path to cursor-agent binary', 'agent')
   .option('--agent-timeout <ms>', 'Agent invocation timeout in milliseconds', '600000')
   .option('--status-server <port>', 'Enable HTTP status server on port (GET / or /status)', undefined)
@@ -321,7 +321,7 @@ program
 program
   .command('init')
   .description('Initialize .gsd/state.json and goals.md (use --agent/--goals/--port for non-interactive)')
-  .option('--agent <name>', 'Agent type: cursor, cn, claude-code, gemini-cli, codex', 'cursor')
+  .option('--agent <name>', 'Agent type: cursor, cn, codex', 'cursor')
   .option('--goals <path>', 'Goals file path', './goals.md')
   .option('--port <n>', 'Status server port', '3000')
   .action(async (opts) => {
@@ -365,6 +365,25 @@ program
     await newProjectCommand();
   });
 
+/** Intake front door: sync GSD, clarify a request, queue the goal, optionally start the daemon. */
+program
+  .command('start [title]')
+  .description('Queue a new goal through the intake bundle flow and optionally start the daemon')
+  .option('--project <path>', 'Path to the target workspace/project root', process.cwd())
+  .option('--body <text>', 'Optional goal details', undefined)
+  .option('--run', 'Start the daemon after queueing when possible', false)
+  .option('--update-only', 'Queue the goal without starting the daemon', false)
+  .action(async (title: string | undefined, opts) => {
+    const { startCommand } = await import('./intake/start-command.js');
+    await startCommand({
+      title,
+      projectPath: opts.project as string,
+      body: (opts.body as string | undefined) ?? undefined,
+      startDaemon: opts.run as boolean,
+      updateOnly: opts.updateOnly as boolean,
+    });
+  });
+
 /** Remove pause flag created after repeated daemon failures. */
 program
   .command('unpause')
@@ -399,7 +418,7 @@ program
 program
   .command('validate-agent')
   .description('Validate agent credentials and binary availability (optional network smoke test)')
-  .option('--agent <name>', 'Agent type: cursor, cn, codex, claude-code, gemini-cli', 'cursor')
+  .option('--agent <name>', 'Agent type: cursor, cn, codex', 'cursor')
   .option('--network', 'Run a live network smoke test', false)
   .option('--config <path>', 'Path to config JSON file', './.autopilot/config.json')
   .option('--workspace <path>', 'Workspace root', process.cwd())

@@ -22,6 +22,7 @@ import type { CursorStreamEvent, ResultEvent } from './stream-events.js';
 import type { AutopilotConfig } from './config.js';
 import { getCursorBinaryPath, getCnBinaryPath, getCodexBinaryPath } from './config/paths.js';
 import { parseCnOutput } from './cn-output.js';
+import { buildGoalContextPrompt } from './goal-context.js';
 
 export type { SessionLogContext };
 
@@ -79,7 +80,16 @@ export function createCursorAgentInvoker(
         prompt += `Previous attempts context:\n${contextBlock}\n\nAvoid repeating these approaches.\n\n`;
       }
     }
-    prompt += cmdString;
+    const goalContextPrompt = await buildGoalContextPrompt({
+      workspaceRoot: workspaceDir,
+      command,
+      logContext,
+    });
+    if (goalContextPrompt) {
+      prompt += `${goalContextPrompt}\n\n`;
+    } else {
+      prompt += cmdString;
+    }
 
     logger.info({ command: cmdString }, `Invoking cursor-agent: ${cmdString}`);
 
@@ -286,10 +296,16 @@ export function createContinueCliInvoker(
       ? `${command.command} ${command.args}`
       : command.command;
 
-    const prompt =
+    let prompt =
       'Execute in non-interactive/YOLO mode. Auto-approve all confirmations. ' +
       'Do not ask the user any questions — make reasonable decisions autonomously.\n\n' +
-      cmdString;
+      '';
+    const goalContextPrompt = await buildGoalContextPrompt({
+      workspaceRoot: workspaceDir,
+      command,
+      logContext,
+    });
+    prompt += goalContextPrompt ? `${goalContextPrompt}\n\n` : cmdString;
 
     logger.info({ command: cmdString }, `Invoking cn: ${cmdString}`);
 
@@ -714,10 +730,16 @@ export function createCodexInvoker(
       ? `${command.command} ${command.args}`
       : command.command;
 
-    const prompt =
+    let prompt =
       'Execute in non-interactive/YOLO mode. Auto-approve all confirmations. ' +
       'Do not ask the user any questions — make reasonable decisions autonomously.\n\n' +
-      cmdString;
+      '';
+    const goalContextPrompt = await buildGoalContextPrompt({
+      workspaceRoot: workspaceDir,
+      command,
+      logContext,
+    });
+    prompt += goalContextPrompt ? `${goalContextPrompt}\n\n` : cmdString;
 
     logger.info({ command: cmdString }, `Invoking codex: ${cmdString}`);
 
@@ -883,17 +905,5 @@ export function createAgentInvoker(
         },
         callbacks,
       );
-    case 'claude-code':
-    case 'gemini-cli': {
-      // TODO: Implement real adapters when those agents support GSD NDJSON/heartbeat contract.
-      const stub: AgentInvoker = async (command, workspaceDir, logger, _logContext) => {
-        logger.info(
-          `Stub (${agentId}): would invoke agent with "${command.command} ${command.args ?? ''}" in ${workspaceDir}`,
-        );
-        await new Promise((resolve) => setTimeout(resolve, 100));
-        return { success: true, output: 'stub' };
-      };
-      return stub;
-    }
   }
 }

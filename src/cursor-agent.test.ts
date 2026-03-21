@@ -41,51 +41,10 @@ describe('createAgentInvoker', () => {
     expect(invoker.length).toBe(4);
   });
 
-  it('returns non-throwing stub for claude-code', async () => {
-    const invoker = createAgentInvoker('claude-code', baseConfig);
-    const infoSpy = vi.spyOn(logger, 'info');
-    const result = await invoker(
-      { command: '/gsd/execute-plan', args: 'foo', description: 'test' },
-      '/workspace',
-      logger,
-    );
-    expect(result.success).toBe(true);
-    expect(result.output).toBe('stub');
-    expect(infoSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Stub (claude-code)'),
-    );
-  });
-
-  it('returns non-throwing stub for gemini-cli', async () => {
-    const invoker = createAgentInvoker('gemini-cli', baseConfig);
-    const infoSpy = vi.spyOn(logger, 'info');
-    const result = await invoker(
-      { command: '/gsd/plan-phase', args: '1', description: 'test' },
-      '/workspace',
-      logger,
-    );
-    expect(result.success).toBe(true);
-    expect(result.output).toBe('stub');
-    expect(infoSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Stub (gemini-cli)'),
-    );
-  });
-
   it('returns codex adapter for agent codex', () => {
     const invoker = createAgentInvoker('codex', baseConfig);
     expect(invoker).toBeTypeOf('function');
     expect(invoker.length).toBe(4);
   });
 
-  it('stub adapters have same call signature as cursor', async () => {
-    const stubInvoker = createAgentInvoker('claude-code', baseConfig);
-    const result = await stubInvoker(
-      { command: '/gsd/execute-plan', args: 'path', description: 'desc' },
-      '/workspace',
-      logger,
-      { goalTitle: 'Goal', phaseNumber: 1, planNumber: 1 },
-    );
-    expect(result).toMatchObject({ success: true, output: 'stub' });
-    expect(result.error).toBeUndefined();
-  });
 });

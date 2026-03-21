@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ComplexityScore, PendingGoal, RawGoal } from './types.js';
+import type { ComplexityScore, PendingGoal } from './clarifier.js';
+import type { RawGoal } from './types.js';
 
 vi.mock('../agent-runner.js', () => ({
   runAgent: vi.fn(),

@@ -139,6 +139,29 @@ describe('intake/goals-writer', () => {
     expect(after).toContain('<!-- success: returns 200 and JSON -->');
   });
 
+  it('queueGoal writes a structured metadata block when breadcrumb fields are provided', async () => {
+    await queueGoal({
+      workspaceRoot,
+      title: 'bootstrap start flow',
+      goalDescription: 'Create the intake-driven start entrypoint.',
+      successCriteria: ['Writes intake bundle', 'Queues goal with route metadata'],
+      route: 'full',
+      contextBundlePath: '.planning/intake/start-flow',
+      sessionContextPath: '.planning/intake/start-flow/SESSION-CONTEXT.md',
+      agentBriefPath: '.planning/intake/start-flow/AGENT-BRIEF.md',
+      replyTo: undefined,
+    });
+
+    const content = readGoals();
+    expect(content).toContain('- [ ] bootstrap start flow');
+    expect(content).toContain('### bootstrap start flow');
+    expect(content).toContain('**Goal:** Create the intake-driven start entrypoint.');
+    expect(content).toContain('**Route:** full');
+    expect(content).toContain('**Context bundle:** .planning/intake/start-flow');
+    expect(content).toContain('**Session context:** .planning/intake/start-flow/SESSION-CONTEXT.md');
+    expect(content).toContain('**Agent brief:** .planning/intake/start-flow/AGENT-BRIEF.md');
+  });
+
   it('notifyQueued calls sendSms when replyTo is set', async () => {
     (sendSms as unknown as { mock: { calls: any[][] } }).mockResolvedValue(undefined);
 
@@ -169,4 +192,3 @@ describe('intake/goals-writer', () => {
     await new Promise((r) => setTimeout(r, 0));
   });
 });
-

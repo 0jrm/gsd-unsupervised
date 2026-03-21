@@ -3,11 +3,17 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { sendSms } from '../notifier.js';
+import { buildGoalMetadataBlock, type GoalRoute } from '../goal-metadata.js';
 
 export interface QueueGoalInput {
   workspaceRoot: string;
   title: string;
   successCriteria: string[];
+  goalDescription?: string;
+  route?: GoalRoute;
+  contextBundlePath?: string;
+  sessionContextPath?: string;
+  agentBriefPath?: string;
   replyTo?: string;
 }
 
@@ -71,7 +77,17 @@ export async function notifyQueued(args: { workspaceRoot: string; title: string;
 }
 
 export async function queueGoal(input: QueueGoalInput): Promise<void> {
-  const { workspaceRoot, title, successCriteria, replyTo } = input;
+  const {
+    workspaceRoot,
+    title,
+    successCriteria,
+    goalDescription,
+    route,
+    contextBundlePath,
+    sessionContextPath,
+    agentBriefPath,
+    replyTo,
+  } = input;
   const goalsPath = goalsFilePath(workspaceRoot);
 
   const raw = await ensureGoalsFile(goalsPath);
@@ -88,7 +104,21 @@ export async function queueGoal(input: QueueGoalInput): Promise<void> {
   const newCheckboxLine = `- [ ] ${title}`;
   lines.splice(insertAt, 0, newCheckboxLine);
 
-  if (successCriteria.length > 0) {
+  const metadataBlock = buildGoalMetadataBlock(title, {
+    goal: goalDescription,
+    successCriteria,
+    route,
+    contextBundlePath,
+    sessionContextPath,
+    agentBriefPath,
+  });
+
+  if (metadataBlock) {
+    const indented = metadataBlock
+      .split('\n')
+      .map((line) => `  ${line}`);
+    lines.splice(insertAt + 1, 0, ...indented);
+  } else if (successCriteria.length > 0) {
     const comment = `<!-- success: ${successCriteria.join('; ')} -->`;
     lines.splice(insertAt + 1, 0, comment);
   }
@@ -99,4 +129,3 @@ export async function queueGoal(input: QueueGoalInput): Promise<void> {
   // Optional SMS notification.
   void notifyQueued({ workspaceRoot, title, replyTo });
 }
-

@@ -5,10 +5,15 @@ import express, { type Request, type Response } from 'express';
 import { appendPendingGoal } from './goals.js';
 import twilio from 'twilio';
 import { normalizeDashboardInput, normalizeSmsInput } from './intake/normalizer.js';
-import { classifyGoal } from './intake/classifier.js';
-import { clarifyGoal, readPendingGoals, resolvePendingGoal, writePendingGoal } from './intake/clarifier.js';
+import {
+  classifyGoal,
+  clarifyGoal,
+  readPendingGoals,
+  resolvePendingGoal,
+  writePendingGoal,
+  type PendingGoal,
+} from './intake/clarifier.js';
 import { queueGoal } from './intake/goals-writer.js';
-import type { PendingGoal } from './intake/types.js';
 
 function escapeTwiML(s: string): string {
   return s
